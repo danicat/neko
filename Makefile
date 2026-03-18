@@ -1,0 +1,43 @@
+# Makefile for neko
+
+# Go parameters
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOCLEAN=$(GOCMD) clean
+GOTEST=$(GOCMD) test
+GOGET=$(GOCMD) get
+BINARY_DIR=bin
+SERVER_BINARY_NAME=neko
+SERVER_BINARY=$(BINARY_DIR)/$(SERVER_BINARY_NAME)
+
+# Version
+VERSION := 0.1.0
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+
+
+all: build
+
+build:
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) $(LDFLAGS) -o $(SERVER_BINARY) ./cmd/neko
+
+install:
+	$(GOCMD) install $(LDFLAGS) ./...
+
+clean:
+	@rm -rf $(BINARY_DIR)
+
+test:
+	$(GOTEST) -v ./...
+
+test-cov:
+	$(GOTEST) -v -coverprofile=coverage.out ./...
+	@echo "to view the coverage report, run: go tool cover -html=coverage.out"
+
+snapshot:
+	goreleaser release --snapshot --clean
+
+release:
+	goreleaser release --clean
+
+.PHONY: all build install clean test test-cov snapshot release

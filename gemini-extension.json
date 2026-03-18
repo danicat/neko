@@ -1,0 +1,12 @@
+{
+  "name": "neko",
+  "version": "1.0.0",
+  "description": "AI-powered language-aware development assistant.",
+  "contextFileName": "NEKO.md",
+  "mcpServers": {
+    "neko": {
+      "command": "${extensionPath}/bin/neko",
+      "args": ["-plugins", "${extensionPath}/plugins"]
+    }
+  }
+}

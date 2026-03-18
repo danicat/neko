@@ -1,0 +1,50 @@
+{
+  "name": "javascript",
+  "extensions": [".js", ".mjs", ".cjs", ".jsx"],
+  "projectMarkers": ["package.json", "package-lock.json", "node_modules"],
+  "skipDirs": ["node_modules", "dist", "build", ".next", ".cache"],
+  "tier": 2,
+  "lsp": {
+    "command": "typescript-language-server",
+    "args": ["--stdio"]
+  },
+  "commands": {
+    "validate": {
+      "command": "node",
+      "args": ["-c", "{{filename}}"]
+    },
+    "format": {
+      "command": "npx",
+      "args": ["prettier", "--write", "{{filename}}"]
+    },
+    "outline": {
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs = require('fs'); const code = fs.readFileSync(process.argv[1], 'utf8'); const regex = /^(?:function\\s+([a-zA-Z0-9_]+)|class\\s+([a-zA-Z0-9_]+)|(?:const|let|var)\\s+([a-zA-Z0-9_]+)\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>)/gm; let match; while ((match = regex.exec(code)) !== null) { console.log(match[1] || match[2] || match[3]); }",
+        "{{filename}}"
+      ]
+    },
+    "build": {
+      "command": "npm",
+      "args": ["run", "build", "--prefix", "{{dir}}"]
+    },
+    "test": {
+      "command": "npm",
+      "args": ["test", "--prefix", "{{dir}}"]
+    },
+    "addDependency": {
+      "command": "npm",
+      "args": ["install", "{{packages}}", "--prefix", "{{dir}}"]
+    },
+        "init": {
+      "command": "npm",
+      "args": ["init", "-y", "--prefix", "{{dir}}"]
+    },
+
+    "fetchDocs": {
+      "command": "npm",
+      "args": ["view", "{{package}}", "description"]
+    }
+  }
+}
