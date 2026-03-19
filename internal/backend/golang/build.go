@@ -73,24 +73,50 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 
 		sb.WriteString("#### Coverage\n")
 		funcOut, funcErr := runGoCmdOutput(ctx, dir, "go", "tool", "cover", "-func="+covFile)
+
+		var coveredPkgs []string
+		var zeroPkgs []string
+		pkgMap := make(map[string]string)
+
 		if funcErr == nil {
-			lines := strings.Split(strings.TrimSpace(funcOut), "\n")
-			if len(lines) > 0 {
-				lastLine := lines[len(lines)-1]
-				if strings.HasPrefix(lastLine, "total:") {
-					parts := strings.Fields(lastLine)
+			lines := strings.SplitSeq(strings.TrimSpace(funcOut), "\n")
+			for line := range lines {
+				if strings.HasPrefix(line, "total:") {
+					parts := strings.Fields(line)
 					if len(parts) >= 3 {
 						sb.WriteString(fmt.Sprintf("- **Total Project Coverage**: %s\n", parts[len(parts)-1]))
 					}
+					continue
 				}
+				// go tool cover -func format:
+				// path/to/file.go:line:	function	coverage%
+				// We want to group by package
+				parts := strings.Fields(line)
+				if len(parts) < 3 {
+					continue
+				}
+				filePart := parts[0] // path/to/file.go:line
+				pkgPath := ""
+				if found := strings.Contains(filePart, "/"); found {
+					if lastSlash := strings.LastIndex(filePart, "/"); lastSlash != -1 {
+						pkgPath = filePart[:lastSlash]
+					}
+				}
+				if pkgPath == "" {
+					pkgPath = "."
+				}
+				// This is a rough estimation since -func doesn't give per-package summary directly
+				// But we'll use the go test summary for the actual package list if possible.
 			}
 		}
 
-		lines := strings.Split(testOut, "\n")
-		var coveredPkgs []string
-		var zeroPkgs []string
+		// 3.1 Get full list of packages to ensure we report those without tests
+		allPkgsOut, _ := runGoCmdOutput(ctx, dir, "go", "list", pkgs)
+		allPkgs := strings.Split(strings.TrimSpace(allPkgsOut), "\n")
 
-		for _, line := range lines {
+		// Use go test -v output to get precise per-package coverage and [no test files]
+		lines := strings.SplitSeq(testOut, "\n")
+		for line := range lines {
 			parts := strings.Fields(line)
 			if len(parts) < 2 {
 				continue
@@ -117,9 +143,20 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 					} else if covStr != "" {
 						coveredPkgs = append(coveredPkgs, fmt.Sprintf("  - `%s`: %s", pkg, covStr))
 					}
+					pkgMap[pkg] = covStr
 				}
 			} else if strings.Contains(line, "[no test files]") {
 				pkg := parts[1]
+				pkgMap[pkg] = "0.0%"
+			}
+		}
+
+		// Add missing packages from allPkgs to zeroPkgs
+		for _, pkg := range allPkgs {
+			if pkg == "" {
+				continue
+			}
+			if _, seen := pkgMap[pkg]; !seen {
 				zeroPkgs = append(zeroPkgs, pkg)
 			}
 		}
@@ -132,8 +169,19 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 		}
 
 		if len(zeroPkgs) > 0 {
+			// Deduplicate and sort zeroPkgs
+			uniqueZero := make(map[string]bool)
+			var sortedZero []string
+			for _, p := range zeroPkgs {
+				if !uniqueZero[p] {
+					uniqueZero[p] = true
+					sortedZero = append(sortedZero, p)
+				}
+			}
+			// (Optional: sort sortedZero here if desired)
+
 			sb.WriteString("- **Zero Coverage / No Tests**: ")
-			for i, pkg := range zeroPkgs {
+			for i, pkg := range sortedZero {
 				if i > 0 {
 					sb.WriteString(", ")
 				}
