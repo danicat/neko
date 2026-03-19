@@ -52,9 +52,9 @@ Neko uses a two-phase lifecycle to ensure the AI agent always has a valid projec
 
 | Tool | Purpose |
 |------|---------|
-| `read_file` | AST-aware reading with outline mode to maximize context efficiency |
-| `edit_file` | Robust fuzzy matching for safe editing with syntax validation |
-| `build` | The universal quality gate for all supported languages |
+| `read_file` | AST-aware reading with outline mode and session-based documentation memoization |
+| `edit_file` | Robust fuzzy matching for safe editing with syntax validation and auto-formatting |
+| `build` | The universal quality gate (Build -> Modernize -> Test -> Lint) |
 | `create_project` | Idiomatic project bootstrapping (e.g., `uv init`, `npm init`) |
 | `describe` | LSP-powered type info and documentation via `gopls`, `pylsp`, etc. |
 | `review_code` | AI-powered idiomatic code review |

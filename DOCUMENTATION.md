@@ -59,12 +59,8 @@ Add Neko to your MCP configuration (e.g., in Claude Desktop or Gemini CLI):
 | Flag | Description |
 |------|-------------|
 | `--version` | Print version and exit |
-| `--agents` | Print agent instructions and exit |
-| `--list-tools` | List available tools and exit |
 | `--listen ADDR` | Start HTTP server (e.g., `127.0.0.1:8080`) |
 | `--model MODEL` | Default Gemini model for code review |
-| `--allow TOOLS` | Comma-separated list of allowed tools |
-| `--disable TOOLS` | Comma-separated list of disabled tools |
 | `--plugins DIR` | Plugin directory path |
 
 ---
@@ -110,10 +106,9 @@ These tools are only registered if at least one active backend supports the unde
 
 | Tool | Required Capability | Description |
 |------|---------------------|-------------|
-| `build` | `toolchain` | Universal quality gate: build, test, lint |
+| `build` | `toolchain` | Universal quality gate: build, test, lint, modernize |
 | `read_docs` | `documentation` | Fetch API docs for any package or symbol |
 | `add_dependencies` | `dependencies` | Install packages and return their docs |
-| `modernize_code` | `modernize` | Upgrade legacy patterns to modern standards |
 | `test_mutations` | `mutation_test` | Mutation testing to measure test quality |
 | `query_tests` | `test_query` | SQL queries over test results and coverage |
 | `describe` | `lsp` | Type info and docs for a symbol at a position |
@@ -159,11 +154,10 @@ All tools use consistent argument names:
 
 ### Toolchain
 
-- **`build(dir, language)`**: The quality gate. Runs the language-appropriate Build -> Test -> Lint pipeline.
+- **`build(dir, language, auto_fix, run_modernize)`**: The quality gate. Runs the language-appropriate Build -> Modernize -> Test -> Lint pipeline.
 - **`read_docs(import_path, symbol, language)`**: Fetch documentation for any package or symbol.
 - **`add_dependencies(packages, language)`**: Install packages and return their API documentation.
 - **`create_project(dir, language, dependencies)`**: Bootstrap a new project with idiomatic structure.
-- **`modernize_code(dir, language, fix)`**: Upgrade legacy patterns to modern standards.
 
 ### Code Intelligence (LSP)
 
@@ -190,7 +184,7 @@ All tools use consistent argument names:
 ### Python
 - **Backend**: Native (internal).
 - **Capabilities**: toolchain, documentation, dependencies, modernize, mutation_test, lsp.
-- **Requirement**: Standardized on `uv`. Every operation (`ruff`, `mypy`, `pytest`) runs via `uv run`.
+- **Requirement**: Standardized on `uv`. Every operation (`ruff`, `mypy`, `pytest`) runs via `uv run`. `uv sync` is used for environment management.
 - **LSP**: `uv run pylsp`.
 - **Initialization**: Uses `uv init` for modern Python project structure.
 
@@ -198,6 +192,7 @@ All tools use consistent argument names:
 - **Backend**: Plugin-based (via `plugins/javascript.json`).
 - **Tools**: Uses `npm` and `node`.
 - **LSP**: `typescript-language-server`.
+- **Modernize**: Uses `eslint --fix` via the plugin.
 - **Initialization**: Uses `npm init -y`.
 
 ---

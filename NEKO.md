@@ -13,8 +13,8 @@ Neko operates in two phases:
 1.  **Project First**: Always establish a project context with `open_project` before working.
 2.  **Explore First**: Before making changes, understand the context. Use `list_files` to map the structure and `read_file` to inspect code and its outline.
 3.  **Precise Editing**: Use `edit_file` for targeted changes. It employs robust fuzzy matching to handle minor inconsistencies. **Always prefer using line numbers (`start_line`, `end_line`) for precision in large files.**
-4.  **The Quality Gate**: Use `build` as your primary way to verify work. It enforces a language-appropriate pipeline (Build -> Test -> Lint) to ensure code is production-ready.
-5.  **Idiomatic Excellence**: Strive for modern, idiomatic patterns. Use `modernize_code` to upgrade legacy code. **Python projects must use `uv` for all operations.**
+4.  **The Quality Gate**: Use `build` as your primary way to verify work. It enforces a language-appropriate pipeline (Build -> Modernize -> Test -> Lint) to ensure code is production-ready.
+5.  **Idiomatic Excellence**: Strive for modern, idiomatic patterns. Modernization is integrated into the `build` tool. **Python projects must use `uv` for all operations.**
 
 ## Tool Usage Guide
 
@@ -28,7 +28,7 @@ Neko operates in two phases:
 -   **`read_file(file, outline, start_line, end_line)`**: A structure-aware reader.
     -   **Outline Mode (`outline=true`):** Retrieve a structural map (types, functions, classes) to reduce token usage.
     -   **Snippet Mode:** Target specific line ranges (`start_line`, `end_line`) for precise context.
-    -   **Context Injection:** Automatically retrieves documentation for imported packages during full reads.
+    -   **Context Injection:** Automatically retrieves documentation for imported packages during full reads. **Documentation is memoized per-session to reduce redundant output.**
 
 ### Editing Code
 -   **`edit_file(file, old_content, new_content)`**: Intelligent file editor with safety guarantees.
