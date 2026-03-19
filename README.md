@@ -1,4 +1,4 @@
-# Neko
+# Neko (v0.1.0)
 
 Neko is an intelligent, language-aware Model Context Protocol (MCP) server designed to empower AI agents with professional-grade software engineering tools.
 

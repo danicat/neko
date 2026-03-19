@@ -1,4 +1,4 @@
-# Neko Documentation
+# Neko Documentation (v0.1.0)
 
 Neko is an intelligent, language-aware development Model Context Protocol (MCP) server. It provides a standardized set of tools for code exploration, editing, building, and analysis across multiple programming languages.
 
