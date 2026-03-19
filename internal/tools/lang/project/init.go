@@ -12,35 +12,36 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the project_init tool with the server.
+// Register registers the create_project tool with the server.
 func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["project_init"]
+	def := toolnames.Registry["create_project"]
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return initHandler(ctx, req, args, reg)
+		return InitHandler(ctx, args, reg)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
-	Path         string   `json:"path" jsonschema:"Directory path for the new project"`
+	Dir          string   `json:"dir" jsonschema:"Directory path for the new project"`
 	ModulePath   string   `json:"module_path" jsonschema:"Module/package name (e.g. github.com/user/repo or my-app)"`
 	Language     string   `json:"language,omitempty" jsonschema:"Language to use (go, python). Auto-detected if omitted."`
 	Dependencies []string `json:"dependencies,omitempty" jsonschema:"Optional: list of dependencies to install"`
 }
 
-func initHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
-	if args.Path == "" {
-		return errorResult("path is required"), nil, nil
+func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+	if args.Dir == "" {
+
+		return errorResult("dir is required"), nil, nil
 	}
 	if args.ModulePath == "" {
-		args.ModulePath = args.Path
+		args.ModulePath = args.Dir
 	}
 
-	absPath, err := roots.Global.Validate(args.Path)
+	absPath, err := roots.Global.Validate(args.Dir)
 	if err != nil {
 		return errorResult(err.Error()), nil, nil
 	}

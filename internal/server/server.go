@@ -6,25 +6,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/danicat/neko/internal/backend"
-	"github.com/danicat/neko/internal/backend/golang"
-	"github.com/danicat/neko/internal/backend/plugin"
-	"github.com/danicat/neko/internal/backend/python"
 	"github.com/danicat/neko/internal/core/config"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/instructions"
 	"github.com/danicat/neko/internal/lsp"
-	"github.com/danicat/neko/internal/prompts"
-	godocres "github.com/danicat/neko/internal/resources/godoc"
 	"github.com/danicat/neko/internal/tools/file/create"
 	"github.com/danicat/neko/internal/tools/file/edit"
 	"github.com/danicat/neko/internal/tools/file/list"
 	"github.com/danicat/neko/internal/tools/file/read"
 	"github.com/danicat/neko/internal/tools/lang/codereview"
 	"github.com/danicat/neko/internal/tools/lang/definition"
+	describe "github.com/danicat/neko/internal/tools/lang/symbolinfo"
 	"github.com/danicat/neko/internal/tools/lang/docs"
 	"github.com/danicat/neko/internal/tools/lang/get"
 	"github.com/danicat/neko/internal/tools/lang/modernize"
@@ -32,7 +28,6 @@ import (
 	"github.com/danicat/neko/internal/tools/lang/project"
 	"github.com/danicat/neko/internal/tools/lang/quality"
 	"github.com/danicat/neko/internal/tools/lang/references"
-	"github.com/danicat/neko/internal/tools/lang/symbolinfo"
 	"github.com/danicat/neko/internal/tools/lang/testquery"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -43,31 +38,24 @@ type Server struct {
 	cfg             *config.Config
 	registry        *backend.Registry
 	registeredTools map[string]bool
+
+	// Project state
+	mu             sync.Mutex
+	projectOpen    bool
+	projectRoot    string
+	activeBackends map[string]backend.LanguageBackend // keyed by Name()
 }
 
-// New creates a new Server instance with auto-detected language backends.
-func New(cfg *config.Config, version string) *Server {
-	reg := backend.NewRegistry()
-
-	// Auto-detect available backends
-	if hasGo() {
-		reg.Register(golang.New())
-	}
-	if hasPython() {
-		reg.Register(python.New())
+// New creates a new Server instance with the given registry and config.
+func New(cfg *config.Config, version string, reg *backend.Registry) *Server {
+	s := &Server{
+		cfg:             cfg,
+		registry:        reg,
+		registeredTools: make(map[string]bool),
+		activeBackends:  make(map[string]backend.LanguageBackend),
 	}
 
-	// Load language plugins
-	if cfg.PluginDir != "" {
-		plugins, err := plugin.LoadPlugins(cfg.PluginDir)
-		if err == nil {
-			for _, p := range plugins {
-				reg.Register(p)
-			}
-		}
-	}
-
-	s := mcp.NewServer(&mcp.Implementation{
+	mcpServer := mcp.NewServer(&mcp.Implementation{
 		Name:    "neko",
 		Version: version,
 	}, &mcp.ServerOptions{
@@ -77,12 +65,8 @@ func New(cfg *config.Config, version string) *Server {
 		},
 	})
 
-	return &Server{
-		mcpServer:       s,
-		cfg:             cfg,
-		registry:        reg,
-		registeredTools: make(map[string]bool),
-	}
+	s.mcpServer = mcpServer
+	return s
 }
 
 // Run starts the MCP server using Stdio.
@@ -134,82 +118,79 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 
 // RegisterHandlers wires all tools, resources, and prompts.
 func (s *Server) RegisterHandlers() error {
-	type toolDef struct {
-		name     string
-		register func(*mcp.Server, *backend.Registry)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	availableTools := []toolDef{
-		{name: "smart_read", register: read.Register},
-		{name: "smart_edit", register: edit.Register},
-		{name: "file_create", register: create.Register},
-		{name: "list_files", register: list.Register},
-		{name: "smart_build", register: quality.Register},
-		{name: "read_docs", register: docs.Register},
-		{name: "add_dependency", register: get.Register},
-		{name: "project_init", register: project.Register},
-		{name: "modernize_code", register: modernize.Register},
-		{name: "mutation_test", register: mutation.Register},
-		{name: "test_query", register: testquery.Register},
-		{name: "symbol_info", register: symbolinfo.Register},
-		{name: "find_definition", register: definition.Register},
-		{name: "find_references", register: references.Register},
-	}
+	if !s.projectOpen {
+		// Lobby Phase
+		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "modernize_code", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code")
 
-	validTools := make(map[string]bool)
+		mcp.AddTool(s.mcpServer, &mcp.Tool{
+			Name:        "open_project",
+			Title:       "Open Project",
+			Description: "Opens an existing project directory.",
+		}, func(ctx context.Context, req *mcp.CallToolRequest, args struct {
+			Dir string `json:"dir" jsonschema:"The root directory of the project"`
+		}) (*mcp.CallToolResult, any, error) {
+			return s.openProjectHandler(ctx, req, args)
+		})
 
-	for _, t := range availableTools {
-		validTools[t.name] = true
-		if s.cfg.IsToolEnabled(t.name) {
-			if !s.registeredTools[t.name] {
-				t.register(s.mcpServer, s.registry)
-				s.registeredTools[t.name] = true
+		mcp.AddTool(s.mcpServer, &mcp.Tool{
+			Name:        "create_project",
+			Title:       "Create Project",
+			Description: "Bootstraps a new project.",
+		}, func(ctx context.Context, req *mcp.CallToolRequest, args project.Params) (*mcp.CallToolResult, any, error) {
+			return s.createProjectHandler(ctx, req, args)
+		})
+	} else {
+		// Project Phase
+		s.mcpServer.RemoveTools("open_project", "create_project")
+
+		mcp.AddTool(s.mcpServer, &mcp.Tool{
+			Name:        "close_project",
+			Title:       "Close Project",
+			Description: "Closes the current project.",
+		}, func(ctx context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+			return s.closeProjectHandler(ctx, req, struct{}{})
+		})
+
+		// Agnostic tools
+		read.Register(s.mcpServer, s)
+		edit.Register(s.mcpServer, s)
+		list.Register(s.mcpServer, s)
+		create.Register(s.mcpServer, s)
+		codereview.Register(s.mcpServer, s, s.cfg.DefaultModel)
+
+		// Capability-based tools
+		caps := make(map[backend.Capability]bool)
+		for _, be := range s.activeBackends {
+			for _, c := range be.Capabilities() {
+				caps[c] = true
 			}
 		}
-	}
 
-	// Register code_review tool (requires AI credentials, may self-disable)
-	validTools["code_review"] = true
-	if s.cfg.IsToolEnabled("code_review") && !s.registeredTools["code_review"] {
-		codereview.Register(s.mcpServer, s.cfg.DefaultModel)
-		s.registeredTools["code_review"] = true
-	}
-
-	// Validate disabled tools
-	for name := range s.cfg.DisabledTools {
-		if !validTools[name] {
-			return fmt.Errorf("unknown tool disabled: %s", name)
+		if caps[backend.CapToolchain] {
+			quality.Register(s.mcpServer, s)
 		}
-	}
-
-	// Register prompts based on available backends
-	if s.registry.Get("go") != nil {
-		if !s.registeredTools["prompt_go_import_this"] {
-			s.mcpServer.AddPrompt(prompts.GoImportThis(), prompts.GoImportThisHandler)
-			s.registeredTools["prompt_go_import_this"] = true
+		if caps[backend.CapDocumentation] {
+			docs.Register(s.mcpServer, s)
 		}
-		if !s.registeredTools["prompt_go_code_review"] {
-			s.mcpServer.AddPrompt(prompts.GoCodeReview(), prompts.GoCodeReviewHandler)
-			s.registeredTools["prompt_go_code_review"] = true
+		if caps[backend.CapDependencies] {
+			get.Register(s.mcpServer, s)
 		}
-	}
-
-	if s.registry.Get("python") != nil {
-		if !s.registeredTools["prompt_python_import_this"] {
-			s.mcpServer.AddPrompt(prompts.PythonImportThis(), prompts.PythonImportThisHandler)
-			s.registeredTools["prompt_python_import_this"] = true
+		if caps[backend.CapModernize] {
+			modernize.Register(s.mcpServer, s)
 		}
-		if !s.registeredTools["prompt_python_code_review"] {
-			s.mcpServer.AddPrompt(prompts.PythonCodeReview(), prompts.PythonCodeReviewHandler)
-			s.registeredTools["prompt_python_code_review"] = true
+		if caps[backend.CapMutationTest] {
+			mutation.Register(s.mcpServer, s)
 		}
-	}
-
-	// Register godoc resources if Go backend is available
-	if s.registry.Get("go") != nil {
-		if !s.registeredTools["resource_godoc"] {
-			godocres.Register(s.mcpServer)
-			s.registeredTools["resource_godoc"] = true
+		if caps[backend.CapTestQuery] {
+			testquery.Register(s.mcpServer, s)
+		}
+		if caps[backend.CapLSP] {
+			describe.Register(s.mcpServer, s)
+			definition.Register(s.mcpServer, s)
+			references.Register(s.mcpServer, s)
 		}
 	}
 
@@ -221,12 +202,142 @@ func (s *Server) Registry() *backend.Registry {
 	return s.registry
 }
 
-func hasGo() bool {
-	_, err := exec.LookPath("go")
-	return err == nil
+// establishProject handles the shared state transition when a project is opened or created.
+func (s *Server) establishProject(ctx context.Context, absRoot string, backends []backend.LanguageBackend) string {
+	s.mu.Lock()
+	s.projectOpen = true
+	s.projectRoot = absRoot
+	s.activeBackends = make(map[string]backend.LanguageBackend)
+	for _, be := range backends {
+		s.activeBackends[be.Name()] = be
+	}
+	s.mu.Unlock()
+
+	// Eager LSP initialization
+	for _, be := range backends {
+		s.startLSP(ctx, be, absRoot)
+	}
+
+	// Update tools list
+	s.RegisterHandlers()
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Project established at %s\n", absRoot))
+	if len(backends) > 0 {
+		sb.WriteString("Active languages detected:\n")
+		for _, be := range backends {
+			sb.WriteString(fmt.Sprintf("- %s\n", be.Name()))
+		}
+	} else {
+		sb.WriteString("No specific language backends detected. General file tools are enabled.")
+	}
+	return sb.String()
 }
 
-func hasPython() bool {
-	_, err := exec.LookPath("uv")
-	return err == nil
+func (s *Server) startLSP(ctx context.Context, be backend.LanguageBackend, absRoot string) {
+	if cmd, args, ok := be.LSPCommand(); ok {
+		opts := be.InitializationOptions()
+		_, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), absRoot, cmd, args, be.LanguageID(), opts)
+		if err != nil {
+			log.Printf("Warning: failed to start LSP for %s: %v", be.LanguageID(), err)
+		}
+	}
+}
+
+// ForFile is the new routing mechanism that also handles dynamic backend activation.
+func (s *Server) ForFile(ctx context.Context, path string) backend.LanguageBackend {
+	be := s.registry.ForFile(path)
+	if be == nil {
+		return nil
+	}
+
+	s.mu.Lock()
+	if !s.projectOpen {
+		s.mu.Unlock()
+		return be
+	}
+
+	_, active := s.activeBackends[be.Name()]
+	if active {
+		s.mu.Unlock()
+		return be
+	}
+
+	// Dynamic activation ("On-Touch")
+	log.Printf("Dynamically activating backend: %s", be.Name())
+	s.activeBackends[be.Name()] = be
+	root := s.projectRoot
+	s.mu.Unlock()
+
+	s.startLSP(ctx, be, root)
+	s.RegisterHandlers() // Re-register to potentially surface new tools
+
+	return be
+}
+
+// openProjectHandler establishes a project context.
+func (s *Server) openProjectHandler(ctx context.Context, _ *mcp.CallToolRequest, args struct {
+	Dir string `json:"dir" jsonschema:"The root directory of the project"`
+}) (*mcp.CallToolResult, any, error) {
+	absRoot, err := roots.Global.Validate(args.Dir)
+	if err != nil {
+		return &mcp.CallToolResult{
+			IsError: true,
+			Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+		}, nil, nil
+	}
+
+	backends := s.registry.DetectBackends(absRoot)
+	msg := s.establishProject(ctx, absRoot, backends)
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
+	}, nil, nil
+}
+
+// createProjectHandler bootstraps and opens a project.
+func (s *Server) createProjectHandler(ctx context.Context, req *mcp.CallToolRequest, args project.Params) (*mcp.CallToolResult, any, error) {
+	// 1. Initialize on disk
+	res, _, err := project.InitHandler(ctx, args, s.registry)
+	if err != nil || res.IsError {
+		return res, nil, err
+	}
+
+	// 2. Open the newly created project
+	absRoot, _ := roots.Global.Validate(args.Dir)
+	backends := s.registry.DetectBackends(absRoot)
+
+	// If detection failed (e.g. no marker yet), manually add the requested language backend
+	if len(backends) == 0 && args.Language != "" {
+		if be := s.registry.Get(args.Language); be != nil {
+			backends = append(backends, be)
+		}
+	}
+
+	msg := s.establishProject(ctx, absRoot, backends)
+
+	// Combine messages
+	initMsg := res.Content[0].(*mcp.TextContent).Text
+	combinedMsg := initMsg + "\n\n" + msg
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: combinedMsg}},
+	}, nil, nil
+}
+
+// closeProjectHandler cleans up the project context.
+func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+	lsp.DefaultManager.CloseAll()
+
+	s.mu.Lock()
+	s.projectOpen = false
+	s.projectRoot = ""
+	s.activeBackends = make(map[string]backend.LanguageBackend)
+	s.mu.Unlock()
+
+	s.RegisterHandlers()
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: "Project closed. Returned to lobby."}},
+	}, nil, nil
 }

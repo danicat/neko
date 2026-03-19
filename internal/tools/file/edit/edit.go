@@ -1,4 +1,4 @@
-// Package edit implements the smart_edit tool.
+// Package edit implements the edit_file tool.
 package edit
 
 import (
@@ -15,21 +15,26 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the smart_edit tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["smart_edit"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+}
+
+// Register registers the edit_file tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["edit_file"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return editHandler(ctx, req, args, reg)
+		return editHandler(ctx, req, args, s)
 	})
 }
 
-// Params defines the input parameters for the smart_edit tool.
+// Params defines the input parameters for the edit_file tool.
 type Params struct {
-	Filename   string  `json:"filename" jsonschema:"The path to the file to edit"`
+	File       string  `json:"file" jsonschema:"The path to the file to edit"`
 	OldContent string  `json:"old_content,omitempty" jsonschema:"Optional: The block of code to find (ignores whitespace). Required if append is false."`
 	NewContent string  `json:"new_content" jsonschema:"The new code to insert"`
 	Threshold  float64 `json:"threshold,omitempty" jsonschema:"Similarity threshold (0.0-1.0) for fuzzy matching, default 0.95"`
@@ -38,12 +43,12 @@ type Params struct {
 	Append     bool    `json:"append,omitempty" jsonschema:"If true, append new_content to the end of the file (ignores old_content)"`
 }
 
-func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.Filename)
+func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
+	absPath, err := roots.Global.Validate(args.File)
 	if err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
-	args.Filename = absPath
+	args.File = absPath
 
 	if args.Threshold == 0 {
 		args.Threshold = 0.95
@@ -55,7 +60,7 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *
 		args.Threshold = 0.0
 	}
 
-	content, err := os.ReadFile(args.Filename)
+	content, err := os.ReadFile(args.File)
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to read file: %v", err)), nil, nil
 	}
@@ -103,46 +108,48 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *
 	}
 
 	// Validate & Format using the appropriate backend
-	be := reg.ForFile(args.Filename)
+	be := s.ForFile(ctx, args.File)
 	var warning string
 	if be != nil {
 		//nolint:gosec // G306
-		if err := os.WriteFile(args.Filename, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
 			return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
 		}
 
-		if err := be.Validate(ctx, args.Filename); err != nil {
-			if restoreErr := os.WriteFile(args.Filename, content, 0644); restoreErr != nil {
+		if err := be.Validate(ctx, args.File); err != nil {
+			if restoreErr := os.WriteFile(args.File, content, 0644); restoreErr != nil {
 				return errorResult(fmt.Sprintf("edit produced invalid code AND failed to restore original: %v (restore: %v)", err, restoreErr)), nil, nil
 			}
 			snippet := shared.ExtractErrorSnippet(newContent, err)
 			return errorResult(fmt.Sprintf("edit produced invalid code: %v\n\nContext:\n```\n%s\n```\nHint: Ensure your new_content is syntactically valid in context.", err, snippet)), nil, nil
 		}
 
-		if fmtErr := be.Format(ctx, args.Filename); fmtErr != nil {
+		if fmtErr := be.Format(ctx, args.File); fmtErr != nil {
 			warning = fmt.Sprintf("\n\n**WARNING:** formatting failed: %v", fmtErr)
 		}
 
-		formatted, err := os.ReadFile(args.Filename)
+		formatted, err := os.ReadFile(args.File)
 		if err == nil {
 			newContent = string(formatted)
 		}
 	}
 
 	//nolint:gosec // G306
-	if err := os.WriteFile(args.Filename, []byte(newContent), 0644); err != nil {
+	if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
 		return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
 	}
 
 	if be != nil {
-		if err := be.Validate(ctx, args.Filename); err != nil {
+		if err := be.Validate(ctx, args.File); err != nil {
 			warning += fmt.Sprintf("\n\n**WARNING:** Post-edit syntax check failed: %v", err)
 		}
+	} else {
+		warning += "\n\n**Note:** Syntax validation and formatting skipped for this file type."
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully edited %s%s", args.Filename, warning)},
+			&mcp.TextContent{Text: fmt.Sprintf("Successfully edited %s%s", args.File, warning)},
 		},
 	}, nil, nil
 }

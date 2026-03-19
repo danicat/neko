@@ -13,15 +13,21 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
 // Register registers the read_docs tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
+func Register(mcpServer *mcp.Server, s Server) {
 	def := toolnames.Registry["read_docs"]
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return docsHandler(ctx, req, args, reg)
+		return docsHandler(ctx, req, args, s)
 	})
 }
 
@@ -30,10 +36,11 @@ type Params struct {
 	ImportPath string `json:"import_path" jsonschema:"The module or package to look up (e.g. net/http, pathlib)"`
 	Symbol     string `json:"symbol,omitempty" jsonschema:"Optional: specific symbol within the module"`
 	Dir        string `json:"dir,omitempty" jsonschema:"Optional: project directory to detect language (default: current)"`
+	Language   string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
 	Format     string `json:"format,omitempty" jsonschema:"Output format: 'markdown' (default) or 'json'"`
 }
 
-func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.ImportPath == "" {
 		return errorResult("import_path is required"), nil, nil
 	}
@@ -53,9 +60,18 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *
 	}
 	absDir, _ := roots.Global.Validate(dir)
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
+		}
+	} else {
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
-		return errorResult("No language backend detected. Ensure you're in a project directory with a recognizable project file."), nil, nil
+		return errorResult("No language backend detected. Ensure you're in a project directory or specify 'language'."), nil, nil
 	}
 
 	// For JSON format, use the Go backend's structured output if available

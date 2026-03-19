@@ -1,4 +1,4 @@
-// Package get implements the add_dependency tool.
+// Package get implements the add_dependencies tool.
 package get
 
 import (
@@ -12,15 +12,21 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the add_dependency tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["add_dependency"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
+// Register registers the add_dependencies tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["add_dependencies"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return getHandler(ctx, req, args, reg)
+		return getHandler(ctx, req, args, s)
 	})
 }
 
@@ -28,9 +34,10 @@ func Register(server *mcp.Server, reg *backend.Registry) {
 type Params struct {
 	Packages []string `json:"packages" jsonschema:"List of packages to install"`
 	Dir      string   `json:"dir,omitempty" jsonschema:"Directory containing the project (default: current)"`
+	Language string   `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
 }
 
-func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if len(args.Packages) == 0 {
 		return errorResult("at least one package is required"), nil, nil
 	}
@@ -44,7 +51,16 @@ func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *b
 		return errorResult(err.Error()), nil, nil
 	}
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
+		}
+	} else {
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
 		return errorResult("No language backend detected for this directory."), nil, nil
 	}
@@ -61,7 +77,6 @@ func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *b
 	for _, pkg := range args.Packages {
 		doc, err := be.FetchDocs(ctx, absDir, pkg, "")
 		if err == nil && doc != "" {
-
 			sb.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", pkg, doc))
 		}
 	}

@@ -25,7 +25,7 @@ var DefaultManager = NewManager()
 
 // ClientFor returns an LSP client for the given language and workspace root.
 // It creates and caches clients lazily.
-func (m *Manager) ClientFor(ctx context.Context, lang, workspaceRoot, command string, args []string, options map[string]interface{}) (*Client, error) {
+func (m *Manager) ClientFor(ctx context.Context, lang, workspaceRoot, command string, args []string, langID string, options map[string]interface{}) (*Client, error) {
 	key := lang + ":" + workspaceRoot
 
 	m.mu.Lock()
@@ -40,7 +40,7 @@ func (m *Manager) ClientFor(ctx context.Context, lang, workspaceRoot, command st
 		return nil, fmt.Errorf("LSP server %q not found in PATH", command)
 	}
 
-	c, err := NewClient(ctx, command, args, workspaceRoot, options)
+	c, err := NewClient(ctx, command, args, workspaceRoot, langID, options)
 	if err != nil {
 		return nil, err
 	}

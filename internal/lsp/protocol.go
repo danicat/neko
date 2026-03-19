@@ -118,6 +118,24 @@ type DidOpenTextDocumentParams struct {
 	TextDocument TextDocumentItem `json:"textDocument"`
 }
 
+// VersionedTextDocumentIdentifier identifies a specific version of a text document.
+type VersionedTextDocumentIdentifier struct {
+	URI     string `json:"uri"`
+	Version int    `json:"version"`
+}
+
+// TextDocumentContentChangeEvent describes a content change event.
+// When Text is the full content, Range should be omitted (full document sync).
+type TextDocumentContentChangeEvent struct {
+	Text string `json:"text"`
+}
+
+// DidChangeTextDocumentParams for textDocument/didChange.
+type DidChangeTextDocumentParams struct {
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
+	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
+}
+
 // DidCloseTextDocumentParams for textDocument/didClose.
 type DidCloseTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`

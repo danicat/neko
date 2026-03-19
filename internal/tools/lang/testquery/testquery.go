@@ -1,4 +1,4 @@
-// Package testquery implements the test_query tool.
+// Package testquery implements the query_tests tool.
 package testquery
 
 import (
@@ -13,27 +13,34 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the test_query tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["test_query"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
+// Register registers the query_tests tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["query_tests"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return queryHandler(ctx, req, args, reg)
+		return queryHandler(ctx, req, args, s)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
-	Query   string `json:"query" jsonschema:"SQL query to run against test/coverage data"`
-	Dir     string `json:"dir,omitempty" jsonschema:"Project directory (default: current)"`
-	Pkg     string `json:"pkg,omitempty" jsonschema:"Package pattern to analyze (default: ./...)"`
-	Rebuild bool   `json:"rebuild,omitempty" jsonschema:"Force rebuild of test database"`
+	Query    string `json:"query" jsonschema:"SQL query to run against test/coverage data"`
+	Dir      string `json:"dir,omitempty" jsonschema:"Project directory (default: current)"`
+	Language string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
+	Pkg      string `json:"pkg,omitempty" jsonschema:"Package pattern to analyze (default: ./...)"`
+	Rebuild  bool   `json:"rebuild,omitempty" jsonschema:"Force rebuild of test database"`
 }
 
-func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.Query == "" {
 		return errorResult("query is required"), nil, nil
 	}
@@ -47,7 +54,16 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg 
 		return errorResult(err.Error()), nil, nil
 	}
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
+		}
+	} else {
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
 		return errorResult("No language backend detected for this directory."), nil, nil
 	}

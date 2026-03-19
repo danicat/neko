@@ -1,4 +1,4 @@
-// Package quality implements the smart_build tool.
+// Package quality implements the build tool.
 package quality
 
 import (
@@ -11,28 +11,35 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["smart_build"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
+// Register registers the build tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["build"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return buildHandler(ctx, req, args, reg)
+		return buildHandler(ctx, req, args, s)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
 	Dir      string `json:"dir,omitempty" jsonschema:"Directory to build in (default: current)"`
+	Language string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
 	Packages string `json:"packages,omitempty" jsonschema:"Packages to check (default: . or ./...)"`
 	RunTests *bool  `json:"run_tests,omitempty" jsonschema:"Run unit tests (default: true)"`
 	RunLint  *bool  `json:"run_lint,omitempty" jsonschema:"Run linter (default: true)"`
 	AutoFix  *bool  `json:"auto_fix,omitempty" jsonschema:"Auto-fix format and lint issues (default: true)"`
 }
 
-func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	dir := args.Dir
 	if dir == "" {
 		dir = "."
@@ -55,7 +62,17 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg 
 		autoFix = *args.AutoFix
 	}
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return result(fmt.Sprintf("unknown language backend: %s", args.Language), true), nil, nil
+		}
+	} else {
+		// Use project root marker or current dir to resolve backend
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
 		return result("No language backend detected for this directory. Ensure the project has a recognizable project file (go.mod, pyproject.toml, etc.).", true), nil, nil
 	}

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/genai"
@@ -23,28 +24,36 @@ var (
 	ErrAuthFailed = fmt.Errorf("authentication failed")
 )
 
-// Register registers the code_review tool with the server.
-func Register(server *mcp.Server, defaultModel string) {
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+}
+
+// Register registers the review_code tool with the server.
+func Register(mcpServer *mcp.Server, s Server, defaultModel string) {
 	reviewHandler, err := NewHandler(context.Background(), defaultModel)
 	if err != nil {
 		if errors.Is(err, ErrAuthFailed) || errors.Is(err, ErrVertexAIMissingConfig) {
-			fmt.Fprintf(os.Stderr, "WARN: Disabling code_review tool: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARN: Disabling review_code tool: %v\n", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "ERROR: Disabling code_review tool: failed to create handler: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ERROR: Disabling review_code tool: failed to create handler: %v\n", err)
 		}
 		return
 	}
-	def := toolnames.Registry["code_review"]
-	mcp.AddTool(server, &mcp.Tool{
+	def := toolnames.Registry["review_code"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
-	}, reviewHandler.Tool)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
+		return reviewHandler.Tool(ctx, req, args, s)
+	})
 }
 
-// Params defines the input parameters for the code_review tool.
+// Params defines the input parameters for the review_code tool.
 type Params struct {
-	FileContent string `json:"file_content" jsonschema:"Source code to review"`
+	File        string `json:"file,omitempty" jsonschema:"Optional: path to the file to review"`
+	FileContent string `json:"file_content,omitempty" jsonschema:"Optional: raw source code to review (if file is not provided)"`
 	ModelName   string `json:"model_name,omitempty" jsonschema:"Optional: Gemini model to use"`
 	Hint        string `json:"hint,omitempty" jsonschema:"Optional: specific area to focus the review on"`
 }
@@ -151,13 +160,28 @@ func NewHandler(ctx context.Context, defaultModel string, opts ...Option) (*Hand
 var jsonMarkdownRegex = regexp.MustCompile("(?s)```json" + "\\s*(.*?)" + "```")
 
 // Tool performs an AI-powered code review and returns structured data.
-func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params) (
-	*mcp.CallToolResult, *Result, error) {
-	if args.FileContent == "" {
+func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (
+	*mcp.CallToolResult, any, error) {
+
+	content := args.FileContent
+	if args.File != "" {
+		data, err := os.ReadFile(args.File)
+		if err != nil {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("failed to read file %s: %v", args.File, err)},
+				},
+			}, nil, nil
+		}
+		content = string(data)
+	}
+
+	if content == "" {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: "file_content cannot be empty"},
+				&mcp.TextContent{Text: "either 'file' or 'file_content' must be provided"},
 			},
 		}, nil, nil
 	}
@@ -172,7 +196,7 @@ func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params)
 	contents := []*genai.Content{
 		{
 			Parts: []*genai.Part{
-				{Text: args.FileContent},
+				{Text: content},
 			},
 		},
 	}

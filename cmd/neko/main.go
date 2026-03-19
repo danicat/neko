@@ -11,9 +11,9 @@ import (
 	"syscall"
 
 	"github.com/danicat/neko/internal/backend"
-	golangbe "github.com/danicat/neko/internal/backend/golang"
+	"github.com/danicat/neko/internal/backend/golang"
 	"github.com/danicat/neko/internal/backend/plugin"
-	pythonbe "github.com/danicat/neko/internal/backend/python"
+	"github.com/danicat/neko/internal/backend/python"
 	"github.com/danicat/neko/internal/core/config"
 	"github.com/danicat/neko/internal/instructions"
 	"github.com/danicat/neko/internal/server"
@@ -75,36 +75,46 @@ func run(ctx context.Context, args []string) error {
 		return nil
 	}
 
+	reg, err := buildRegistry(cfg)
+	if err != nil {
+		return err
+	}
+
 	if cfg.Agents {
-		reg := backend.NewRegistry()
-		if _, err := exec.LookPath("go"); err == nil {
-			reg.Register(golangbe.New())
-		}
-		if _, err := exec.LookPath("python3"); err == nil {
-			reg.Register(pythonbe.New())
-		} else if _, err := exec.LookPath("python"); err == nil {
-			reg.Register(pythonbe.New())
-		}
-
-		// Load language plugins
-		if cfg.PluginDir != "" {
-			plugins, err := plugin.LoadPlugins(cfg.PluginDir)
-			if err == nil {
-				for _, p := range plugins {
-					reg.Register(p)
-				}
-			}
-		}
-
 		fmt.Println(instructions.Get(cfg, reg))
 		return nil
 	}
 
-	srv := server.New(cfg, version)
+	srv := server.New(cfg, version, reg)
 
 	if cfg.ListenAddr != "" {
 		return srv.ServeHTTP(ctx, cfg.ListenAddr)
 	}
 
 	return srv.Run(ctx)
+}
+
+// buildRegistry creates a backend registry with auto-detected native backends
+// and any configured plugins.
+func buildRegistry(cfg *config.Config) (*backend.Registry, error) {
+	reg := backend.NewRegistry()
+
+	if _, err := exec.LookPath("go"); err == nil {
+		reg.Register(golang.New())
+	}
+	if _, err := exec.LookPath("uv"); err == nil {
+		reg.Register(python.New())
+	}
+
+	if cfg.PluginDir != "" {
+		plugins, err := plugin.LoadPlugins(cfg.PluginDir)
+		if err != nil {
+			return nil, fmt.Errorf("plugin loading failed: %w", err)
+		}
+		for _, p := range plugins {
+			reg.Register(p)
+		}
+	}
+
+	return reg, nil
 }

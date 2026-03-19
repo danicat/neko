@@ -3,6 +3,7 @@ package server
 import (
 	"testing"
 
+	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/config"
 )
 
@@ -44,7 +45,8 @@ func TestServer_RegisterHandlers_DisableTools(t *testing.T) {
 			cfg := &config.Config{
 				DisabledTools: tt.disabledTools,
 			}
-			s := New(cfg, "test")
+			reg := backend.NewRegistry()
+			s := New(cfg, "test", reg)
 			err := s.RegisterHandlers()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("RegisterHandlers() error = %v, wantErr %v", err, tt.wantErr)

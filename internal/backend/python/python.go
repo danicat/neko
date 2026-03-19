@@ -30,8 +30,22 @@ func (b *Backend) InitializationOptions() map[string]interface{} {
 	return nil
 }
 
-func (b *Backend) Name() string             { return "python" }
+func (b *Backend) LanguageID() string { return "python" }
+func (b *Backend) Name() string       { return "python" }
+
+func (b *Backend) Capabilities() []backend.Capability {
+	return []backend.Capability{
+		backend.CapToolchain,
+		backend.CapDocumentation,
+		backend.CapDependencies,
+		backend.CapModernize,
+		backend.CapMutationTest,
+		backend.CapLSP,
+	}
+}
+
 func (b *Backend) FileExtensions() []string { return []string{".py", ".pyi"} }
+
 func (b *Backend) ProjectMarkers() []string {
 	return []string{"pyproject.toml", "setup.py", "requirements.txt", "setup.cfg", "Pipfile"}
 }

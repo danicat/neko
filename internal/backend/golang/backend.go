@@ -36,8 +36,23 @@ func (b *Backend) InitializationOptions() map[string]interface{} {
 	}
 }
 
-func (b *Backend) Name() string             { return "go" }
+func (b *Backend) LanguageID() string { return "go" }
+func (b *Backend) Name() string       { return "go" }
+
+func (b *Backend) Capabilities() []backend.Capability {
+	return []backend.Capability{
+		backend.CapToolchain,
+		backend.CapDocumentation,
+		backend.CapDependencies,
+		backend.CapModernize,
+		backend.CapMutationTest,
+		backend.CapTestQuery,
+		backend.CapLSP,
+	}
+}
+
 func (b *Backend) FileExtensions() []string { return []string{".go"} }
+
 func (b *Backend) ProjectMarkers() []string { return []string{"go.mod"} }
 func (b *Backend) Tier() int                { return 3 }
 func (b *Backend) SkipDirs() []string {

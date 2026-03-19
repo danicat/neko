@@ -11,25 +11,32 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
 // Register registers the modernize_code tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
+func Register(mcpServer *mcp.Server, s Server) {
 	def := toolnames.Registry["modernize_code"]
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return modernizeHandler(ctx, req, args, reg)
+		return modernizeHandler(ctx, req, args, s)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
-	Dir string `json:"dir,omitempty" jsonschema:"Directory to modernize (default: current)"`
-	Fix bool   `json:"fix,omitempty" jsonschema:"If true, apply fixes automatically"`
+	Dir      string `json:"dir,omitempty" jsonschema:"Directory to modernize (default: current)"`
+	Language string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
+	Fix      bool   `json:"fix,omitempty" jsonschema:"If true, apply fixes automatically"`
 }
 
-func modernizeHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func modernizeHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	dir := args.Dir
 	if dir == "" {
 		dir = "."
@@ -39,7 +46,16 @@ func modernizeHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, 
 		return errorResult(err.Error()), nil, nil
 	}
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
+		}
+	} else {
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
 		return errorResult("No language backend detected for this directory."), nil, nil
 	}

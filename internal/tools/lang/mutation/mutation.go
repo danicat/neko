@@ -1,4 +1,4 @@
-// Package mutation implements the mutation_test tool.
+// Package mutation implements the test_mutations tool.
 package mutation
 
 import (
@@ -11,24 +11,31 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the mutation_test tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["mutation_test"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	Registry() *backend.Registry
+}
+
+// Register registers the test_mutations tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["test_mutations"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return mutationHandler(ctx, req, args, reg)
+		return mutationHandler(ctx, req, args, s)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
-	Dir string `json:"dir,omitempty" jsonschema:"Directory to run mutation testing in (default: current)"`
+	Dir      string `json:"dir,omitempty" jsonschema:"Directory to run mutation testing in (default: current)"`
+	Language string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
 }
 
-func mutationHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
+func mutationHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	dir := args.Dir
 	if dir == "" {
 		dir = "."
@@ -38,7 +45,16 @@ func mutationHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, r
 		return errorResult(err.Error()), nil, nil
 	}
 
-	be := reg.ForDir(absDir)
+	var be backend.LanguageBackend
+	if args.Language != "" {
+		be = s.Registry().Get(args.Language)
+		if be == nil {
+			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
+		}
+	} else {
+		be = s.Registry().ForDir(absDir)
+	}
+
 	if be == nil {
 		return errorResult("No language backend detected for this directory."), nil, nil
 	}

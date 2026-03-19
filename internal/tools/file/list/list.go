@@ -16,26 +16,32 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// Server defines the interface required by the tool.
+type Server interface {
+	Registry() *backend.Registry
+}
+
 // Register registers the tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
+func Register(mcpServer *mcp.Server, s Server) {
 	def := toolnames.Registry["list_files"]
-	mcp.AddTool(server, &mcp.Tool{
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return listHandler(ctx, req, args, reg)
+		return listHandler(ctx, req, args, s)
 	})
 }
 
 // Params defines the input parameters.
 type Params struct {
-	Path  string `json:"path" jsonschema:"The root path to list (default: .)"`
+	Dir   string `json:"dir" jsonschema:"The root path to list (default: .)"`
 	Depth int    `json:"depth,omitempty" jsonschema:"Maximum recursion depth (0 for default of 5, 1 for non-recursive)"`
 }
 
-func listHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
-	absRoot, err := roots.Global.Validate(args.Path)
+func listHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
+	absRoot, err := roots.Global.Validate(args.Dir)
+
 	if err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
@@ -50,7 +56,7 @@ func listHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *
 	}
 
 	skipDirs := defaultSkipDirs()
-	skipDirs = append(skipDirs, reg.AllSkipDirs()...)
+	skipDirs = append(skipDirs, s.Registry().AllSkipDirs()...)
 	return walkDir(absRoot, maxDepth, skipDirs)
 }
 

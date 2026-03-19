@@ -26,8 +26,24 @@ type InitOpts struct {
 	Dependencies []string
 }
 
+// Capability represents a specific feature supported by a language backend.
+type Capability string
+
+const (
+	CapToolchain     Capability = "toolchain"
+	CapDocumentation Capability = "documentation"
+	CapDependencies  Capability = "dependencies"
+	CapModernize     Capability = "modernize"
+	CapMutationTest  Capability = "mutation_test"
+	CapTestQuery     Capability = "test_query"
+	CapLSP           Capability = "lsp"
+)
+
 // LanguageBackend defines the interface every language must implement.
 type LanguageBackend interface {
+	// Capabilities returns the set of features supported by this backend.
+	Capabilities() []Capability
+
 	// File understanding
 	Outline(ctx context.Context, filename string) (string, error)
 	ImportDocs(ctx context.Context, imports []string) ([]string, error)
@@ -55,6 +71,7 @@ type LanguageBackend interface {
 	InitializationOptions() map[string]interface{}
 
 	// Metadata
+	LanguageID() string
 	Name() string
 	FileExtensions() []string
 	SkipDirs() []string

@@ -19,20 +19,23 @@ import (
 
 // Client is a minimal LSP client that communicates with a language server over stdio.
 type Client struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	reader  *bufio.Reader
-	mu      sync.Mutex
-	nextID  atomic.Int64
-	pending map[int64]chan *jsonrpcResponse
-	opened  map[string]bool // URIs of opened documents
-	rootURI string
-	options map[string]interface{}
-	done    chan struct{}
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	reader   *bufio.Reader
+	mu       sync.Mutex
+	nextID   atomic.Int64
+	pending  map[int64]chan *jsonrpcResponse
+	opened   map[string]int // URIs of opened documents → version
+	rootURI  string
+	langID   string
+	options  map[string]interface{}
+	done     chan struct{}
+	closeOnce sync.Once
 }
 
 // NewClient starts an LSP server and initializes the connection.
-func NewClient(ctx context.Context, command string, args []string, workspaceRoot string, options map[string]interface{}) (*Client, error) {
+// langID is the LSP language identifier (e.g. "go", "python", "javascript").
+func NewClient(ctx context.Context, command string, args []string, workspaceRoot string, langID string, options map[string]interface{}) (*Client, error) {
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Stderr = os.Stderr
 
@@ -56,8 +59,9 @@ func NewClient(ctx context.Context, command string, args []string, workspaceRoot
 		stdin:   stdin,
 		reader:  bufio.NewReader(stdout),
 		pending: make(map[int64]chan *jsonrpcResponse),
-		opened:  make(map[string]bool),
+		opened:  make(map[string]int),
 		rootURI: fileURI(absRoot),
+		langID:  langID,
 		options: options,
 		done:    make(chan struct{}),
 	}
@@ -72,19 +76,23 @@ func NewClient(ctx context.Context, command string, args []string, workspaceRoot
 	return c, nil
 }
 
-// Close shuts down the LSP server gracefully.
+// Close shuts down the LSP server gracefully. Safe to call multiple times.
 func (c *Client) Close() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	var closeErr error
+	c.closeOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 
-	// Send shutdown request
-	c.call(ctx, "shutdown", nil)
-	// Send exit notification
-	c.notify("exit", nil)
+		// Send shutdown request
+		c.call(ctx, "shutdown", nil)
+		// Send exit notification
+		c.notify("exit", nil)
 
-	c.stdin.Close()
-	close(c.done)
-	return c.cmd.Wait()
+		c.stdin.Close()
+		close(c.done)
+		closeErr = c.cmd.Wait()
+	})
+	return closeErr
 }
 
 // Hover returns hover information for a position in a file.
@@ -273,20 +281,41 @@ func (c *Client) ensureOpen(ctx context.Context, file string) (string, error) {
 	absPath, _ := filepath.Abs(file)
 	uri := fileURI(absPath)
 
-	c.mu.Lock()
-	alreadyOpen := c.opened[uri]
-	c.mu.Unlock()
-
-	if alreadyOpen {
-		return uri, nil
-	}
-
+	//nolint:gosec // G304
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file %s: %w", file, err)
 	}
 
-	langID := detectLanguageID(absPath)
+	c.mu.Lock()
+	version, alreadyOpen := c.opened[uri]
+	c.mu.Unlock()
+
+	if alreadyOpen {
+		// Re-send content in case the file was modified since last open
+		newVersion := version + 1
+		err = c.notify("textDocument/didChange", DidChangeTextDocumentParams{
+			TextDocument: VersionedTextDocumentIdentifier{
+				URI:     uri,
+				Version: newVersion,
+			},
+			ContentChanges: []TextDocumentContentChangeEvent{
+				{Text: string(content)},
+			},
+		})
+		if err != nil {
+			return "", err
+		}
+		c.mu.Lock()
+		c.opened[uri] = newVersion
+		c.mu.Unlock()
+		return uri, nil
+	}
+
+	langID := c.langID
+	if langID == "" {
+		langID = detectLanguageID(absPath)
+	}
 
 	err = c.notify("textDocument/didOpen", DidOpenTextDocumentParams{
 		TextDocument: TextDocumentItem{
@@ -301,10 +330,10 @@ func (c *Client) ensureOpen(ctx context.Context, file string) (string, error) {
 	}
 
 	c.mu.Lock()
-	c.opened[uri] = true
+	c.opened[uri] = 1
 	c.mu.Unlock()
 
-	// Give the server a moment to process the file
+	// Give the server a moment to index the file on first open
 	select {
 	case <-time.After(500 * time.Millisecond):
 	case <-ctx.Done():

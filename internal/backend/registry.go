@@ -66,7 +66,25 @@ func (r *Registry) ForDir(dir string) LanguageBackend {
 	return best
 }
 
+// DetectBackends returns all backends that match the given directory based on project markers.
+func (r *Registry) DetectBackends(dir string) []LanguageBackend {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var matched []LanguageBackend
+	for _, be := range r.backends {
+		for _, marker := range be.ProjectMarkers() {
+			if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+				matched = append(matched, be)
+				break
+			}
+		}
+	}
+	return matched
+}
+
 // Available returns the names of all registered backends.
+
 func (r *Registry) Available() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

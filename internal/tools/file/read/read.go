@@ -1,4 +1,4 @@
-// Package read implements the smart_read tool.
+// Package read implements the read_file tool.
 package read
 
 import (
@@ -15,34 +15,39 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Register registers the smart_read tool with the server.
-func Register(server *mcp.Server, reg *backend.Registry) {
-	def := toolnames.Registry["smart_read"]
-	mcp.AddTool(server, &mcp.Tool{
+// Server defines the interface required by the tool.
+type Server interface {
+	ForFile(ctx context.Context, path string) backend.LanguageBackend
+}
+
+// Register registers the read_file tool with the server.
+func Register(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["read_file"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
 		Description: def.Description,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
-		return readHandler(ctx, req, args, reg)
+		return readHandler(ctx, req, args, s)
 	})
 }
 
-// Params defines the input parameters for the smart_read tool.
+// Params defines the input parameters for the read_file tool.
 type Params struct {
-	Filename  string `json:"filename" jsonschema:"The path to the file to read"`
+	File      string `json:"file" jsonschema:"The path to the file to read"`
 	Outline   bool   `json:"outline,omitempty" jsonschema:"Optional: if true, returns the structure (AST) only"`
 	StartLine int    `json:"start_line,omitempty" jsonschema:"Optional: start reading from this line number"`
 	EndLine   int    `json:"end_line,omitempty" jsonschema:"Optional: stop reading at this line number"`
 }
 
-func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.Filename)
+func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
+	absPath, err := roots.Global.Validate(args.File)
 	if err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
-	args.Filename = absPath
+	args.File = absPath
 
-	be := reg.ForFile(absPath)
+	be := s.ForFile(ctx, absPath)
 
 	// Outline Mode
 	if args.Outline && args.StartLine == 0 && be != nil {
@@ -110,13 +115,17 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, reg *
 	if isPartial {
 		rangeInfo = fmt.Sprintf(" (Lines %d-%d)", startLine, startLine+len(lines)-1)
 	}
-	sb.WriteString(fmt.Sprintf("# File: %s%s\n\n", args.Filename, rangeInfo))
+	sb.WriteString(fmt.Sprintf("# File: %s%s\n\n", args.File, rangeInfo))
 
 	sb.WriteString("```")
 	sb.WriteString(langTag(absPath))
 	sb.WriteString("\n")
 	sb.WriteString(contentWithLines.String())
 	sb.WriteString("```\n\n")
+
+	if args.Outline && be == nil {
+		sb.WriteString("*Note: Outline not available for this file type. Showing full content instead.*\n\n")
+	}
 
 	if isPartial {
 		sb.WriteString("*Note: Partial read - analysis skipped.*\n\n")
