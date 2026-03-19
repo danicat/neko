@@ -13,6 +13,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type testServer struct {
+	reg *backend.Registry
+}
+
+func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
+	return ts.reg.ForFile(path)
+}
+
 func TestRead(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -47,7 +55,8 @@ func main() {
 	}
 
 	// Full read
-	res, _, err := readHandler(context.Background(), nil, Params{Filename: srcFile}, reg)
+	s := &testServer{reg: reg}
+	res, _, err := readHandler(context.Background(), nil, Params{File: srcFile}, s)
 	if err != nil {
 		t.Fatalf("handler failed: %v", err)
 	}
@@ -80,11 +89,12 @@ line 5`
 		t.Fatal(err)
 	}
 
+	s := &testServer{reg: reg}
 	res, _, err := readHandler(context.Background(), nil, Params{
-		Filename:  srcFile,
+		File:      srcFile,
 		StartLine: 2,
 		EndLine:   4,
-	}, reg)
+	}, s)
 	if err != nil {
 		t.Fatalf("handler failed: %v", err)
 	}

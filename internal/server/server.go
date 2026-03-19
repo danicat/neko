@@ -202,6 +202,43 @@ func (s *Server) Registry() *backend.Registry {
 	return s.registry
 }
 
+// ResolveBackend returns the appropriate backend for a language-aware tool.
+// If language is specified, it looks up by name. Otherwise, it uses the active
+// backends from the current project: if exactly one is active, it returns that;
+// if multiple are active, it returns an error asking the caller to specify.
+func (s *Server) ResolveBackend(language string) (backend.LanguageBackend, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	supported := s.registry.Available()
+
+	if language != "" {
+		if be, ok := s.activeBackends[language]; ok {
+			return be, nil
+		}
+		if be := s.registry.Get(language); be != nil {
+			return be, nil
+		}
+		return nil, fmt.Errorf("unknown language backend: %q. Supported languages: %s", language, strings.Join(supported, ", "))
+	}
+
+	if len(s.activeBackends) == 1 {
+		for _, be := range s.activeBackends {
+			return be, nil
+		}
+	}
+
+	if len(s.activeBackends) == 0 {
+		return nil, fmt.Errorf("no language backends active for this project. Supported languages: %s", strings.Join(supported, ", "))
+	}
+
+	names := make([]string, 0, len(s.activeBackends))
+	for name := range s.activeBackends {
+		names = append(names, name)
+	}
+	return nil, fmt.Errorf("multiple backends active (%s), please specify the 'language' parameter", strings.Join(names, ", "))
+}
+
 // establishProject handles the shared state transition when a project is opened or created.
 func (s *Server) establishProject(ctx context.Context, absRoot string, backends []backend.LanguageBackend) string {
 	s.mu.Lock()

@@ -14,7 +14,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
-	Registry() *backend.Registry
+	ResolveBackend(language string) (backend.LanguageBackend, error)
 }
 
 // Register registers the build tool with the server.
@@ -62,19 +62,9 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		autoFix = *args.AutoFix
 	}
 
-	var be backend.LanguageBackend
-	if args.Language != "" {
-		be = s.Registry().Get(args.Language)
-		if be == nil {
-			return result(fmt.Sprintf("unknown language backend: %s", args.Language), true), nil, nil
-		}
-	} else {
-		// Use project root marker or current dir to resolve backend
-		be = s.Registry().ForDir(absDir)
-	}
-
-	if be == nil {
-		return result("No language backend detected for this directory. Ensure the project has a recognizable project file (go.mod, pyproject.toml, etc.).", true), nil, nil
+	be, err := s.ResolveBackend(args.Language)
+	if err != nil {
+		return result(err.Error(), true), nil, nil
 	}
 
 	report, err := be.BuildPipeline(ctx, absDir, backend.BuildOpts{

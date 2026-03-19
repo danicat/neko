@@ -16,7 +16,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
-	Registry() *backend.Registry
+	ResolveBackend(language string) (backend.LanguageBackend, error)
 }
 
 // Register registers the query_tests tool with the server.
@@ -54,18 +54,9 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		return errorResult(err.Error()), nil, nil
 	}
 
-	var be backend.LanguageBackend
-	if args.Language != "" {
-		be = s.Registry().Get(args.Language)
-		if be == nil {
-			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
-		}
-	} else {
-		be = s.Registry().ForDir(absDir)
-	}
-
-	if be == nil {
-		return errorResult("No language backend detected for this directory."), nil, nil
+	be, err := s.ResolveBackend(args.Language)
+	if err != nil {
+		return errorResult(err.Error()), nil, nil
 	}
 
 	pkg := args.Pkg

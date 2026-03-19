@@ -46,21 +46,30 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 		return errorResult(err.Error()), nil, nil
 	}
 
-	// Determine backend: explicit language or try to detect from existing dir
+	// Determine backend: explicit language or detect from project markers
 	var be backend.LanguageBackend
 	if args.Language != "" {
 		be = reg.Get(args.Language)
 		if be == nil {
-			return errorResult(fmt.Sprintf("unknown language: %s. Available: %v", args.Language, reg.Available())), nil, nil
+			return errorResult(fmt.Sprintf("unknown language: %q. Supported: %v", args.Language, reg.Available())), nil, nil
 		}
 	} else {
-		be = reg.ForDir(absPath)
-		if be == nil {
-			// Default to Go if available
+		// Try to detect from existing markers in the directory
+		detected := reg.DetectBackends(absPath)
+		if len(detected) == 1 {
+			be = detected[0]
+		} else if len(detected) == 0 {
+			// Default to Go if available, then Python
 			be = reg.Get("go")
 			if be == nil {
 				be = reg.Get("python")
 			}
+		} else {
+			var names []string
+			for _, d := range detected {
+				names = append(names, d.Name())
+			}
+			return errorResult(fmt.Sprintf("multiple languages detected (%s), please specify the 'language' parameter", strings.Join(names, ", "))), nil, nil
 		}
 	}
 

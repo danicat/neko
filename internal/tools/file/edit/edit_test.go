@@ -13,6 +13,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type testServer struct {
+	reg *backend.Registry
+}
+
+func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
+	return ts.reg.ForFile(path)
+}
+
 func TestEdit(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "edit-test-*")
 	if err != nil {
@@ -65,10 +73,10 @@ func main() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res, _, err := editHandler(context.TODO(), nil, Params{
-				Filename:   filePath,
+				File:   filePath,
 				OldContent: tt.search,
 				NewContent: tt.replace,
-			}, reg)
+			}, &testServer{reg: reg})
 			if err != nil {
 				t.Fatalf("editHandler failed: %v", err)
 			}
@@ -108,10 +116,10 @@ func TestEdit_Broken(t *testing.T) {
 
 	// Invalid Syntax
 	res, _, _ := editHandler(context.TODO(), nil, Params{
-		Filename:   filePath,
+		File:   filePath,
 		OldContent: "func main() {}",
 		NewContent: "func main() { invalid syntax }",
-	}, reg)
+	}, &testServer{reg: reg})
 	if !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "edit produced invalid code") {
 		t.Errorf("expected error for invalid syntax, got: %s", res.Content[0].(*mcp.TextContent).Text)
 	}

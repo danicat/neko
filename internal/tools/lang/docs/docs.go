@@ -16,7 +16,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
-	Registry() *backend.Registry
+	ResolveBackend(language string) (backend.LanguageBackend, error)
 }
 
 // Register registers the read_docs tool with the server.
@@ -60,18 +60,9 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	}
 	absDir, _ := roots.Global.Validate(dir)
 
-	var be backend.LanguageBackend
-	if args.Language != "" {
-		be = s.Registry().Get(args.Language)
-		if be == nil {
-			return errorResult(fmt.Sprintf("unknown language backend: %s", args.Language)), nil, nil
-		}
-	} else {
-		be = s.Registry().ForDir(absDir)
-	}
-
-	if be == nil {
-		return errorResult("No language backend detected. Ensure you're in a project directory or specify 'language'."), nil, nil
+	be, err := s.ResolveBackend(args.Language)
+	if err != nil {
+		return errorResult(err.Error()), nil, nil
 	}
 
 	// For JSON format, use the Go backend's structured output if available
