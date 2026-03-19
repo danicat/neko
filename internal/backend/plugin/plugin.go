@@ -239,10 +239,23 @@ func (b *PluginBackend) ImportDocs(ctx context.Context, imports []string) ([]str
 
 func (b *PluginBackend) BuildPipeline(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.BuildReport, error) {
 	vars := map[string]string{"dir": dir, "packages": opts.Packages}
+	var combined strings.Builder
 
-	// Multi-step pipeline if buildSteps is configured
+	// 1. Modernize (if requested and supported)
+	if opts.RunModernize {
+		if _, ok := b.plugin.Commands["modernize"]; ok {
+			combined.WriteString("### 🚀 Modernize: ")
+			modOut, err := b.Modernize(ctx, dir, opts.AutoFix)
+			combined.WriteString(modOut)
+			combined.WriteString("\n\n")
+			if err != nil {
+				return &backend.BuildReport{Output: combined.String(), IsError: true}, nil
+			}
+		}
+	}
+
+	// 2. Build Steps
 	if len(b.plugin.BuildSteps) > 0 {
-		var combined strings.Builder
 		for _, step := range b.plugin.BuildSteps {
 			args := expandArgs(step.Args, vars)
 			cmd := exec.CommandContext(ctx, step.Command, args...)
@@ -256,9 +269,10 @@ func (b *PluginBackend) BuildPipeline(ctx context.Context, dir string, opts back
 		return &backend.BuildReport{Output: combined.String()}, nil
 	}
 
-	// Single-command fallback
+	// 3. Single-command fallback
 	out, err := b.runCommand(ctx, "build", vars)
-	report := &backend.BuildReport{Output: out}
+	combined.WriteString(out)
+	report := &backend.BuildReport{Output: combined.String()}
 	if err != nil {
 		report.IsError = true
 	}

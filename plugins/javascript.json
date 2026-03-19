@@ -29,6 +29,10 @@
     "fetchDocs": {
       "command": "npm",
       "args": ["view", "{{package}}", "description"]
+    },
+    "modernize": {
+      "command": "npx",
+      "args": ["eslint", "--fix", "."]
     }
   },
   "buildSteps": [
