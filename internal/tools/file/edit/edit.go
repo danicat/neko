@@ -111,6 +111,7 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	be := s.ForFile(ctx, args.File)
 	var warning string
 	if be != nil {
+
 		//nolint:gosec // G306
 		if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
 			return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil

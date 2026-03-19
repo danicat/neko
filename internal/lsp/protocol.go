@@ -75,9 +75,24 @@ type Diagnostic struct {
 // InitializeParams for the initialize request.
 type InitializeParams struct {
 	ProcessID             int                    `json:"processId"`
+	RootPath              string                 `json:"rootPath,omitempty"`
 	RootURI               string                 `json:"rootUri"`
+	ClientInfo            *ClientInfo            `json:"clientInfo,omitempty"`
 	Capabilities          ClientCapabilities     `json:"capabilities"`
 	InitializationOptions map[string]interface{} `json:"initializationOptions,omitempty"`
+	WorkspaceFolders      []WorkspaceFolder      `json:"workspaceFolders,omitempty"`
+}
+
+// ClientInfo defines information about the client.
+type ClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+}
+
+// WorkspaceFolder defines a workspace folder.
+type WorkspaceFolder struct {
+	URI  string `json:"uri"`
+	Name string `json:"name"`
 }
 
 // ClientCapabilities defines the client's capabilities.

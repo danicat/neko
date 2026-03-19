@@ -57,6 +57,7 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 	var warning string
 
 	if be != nil {
+
 		if fmtErr := be.Format(ctx, args.File); fmtErr != nil {
 			warning = fmt.Sprintf("\n\n**WARNING:** formatting failed: %v", fmtErr)
 		}

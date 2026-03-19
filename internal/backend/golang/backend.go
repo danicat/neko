@@ -48,6 +48,7 @@ func (b *Backend) Capabilities() []backend.Capability {
 		backend.CapMutationTest,
 		backend.CapTestQuery,
 		backend.CapLSP,
+		backend.CapReview,
 	}
 }
 

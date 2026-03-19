@@ -20,7 +20,6 @@ import (
 	"github.com/danicat/neko/internal/tools/file/read"
 	"github.com/danicat/neko/internal/tools/lang/codereview"
 	"github.com/danicat/neko/internal/tools/lang/definition"
-	describe "github.com/danicat/neko/internal/tools/lang/symbolinfo"
 	"github.com/danicat/neko/internal/tools/lang/docs"
 	"github.com/danicat/neko/internal/tools/lang/get"
 	"github.com/danicat/neko/internal/tools/lang/modernize"
@@ -28,6 +27,7 @@ import (
 	"github.com/danicat/neko/internal/tools/lang/project"
 	"github.com/danicat/neko/internal/tools/lang/quality"
 	"github.com/danicat/neko/internal/tools/lang/references"
+	describe "github.com/danicat/neko/internal/tools/lang/symbolinfo"
 	"github.com/danicat/neko/internal/tools/lang/testquery"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -120,7 +120,10 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 func (s *Server) RegisterHandlers() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.registerHandlersLocked()
+}
 
+func (s *Server) registerHandlersLocked() error {
 	if !s.projectOpen {
 		// Lobby Phase
 		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "modernize_code", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code")
@@ -203,9 +206,6 @@ func (s *Server) Registry() *backend.Registry {
 }
 
 // ResolveBackend returns the appropriate backend for a language-aware tool.
-// If language is specified, it looks up by name. Otherwise, it uses the active
-// backends from the current project: if exactly one is active, it returns that;
-// if multiple are active, it returns an error asking the caller to specify.
 func (s *Server) ResolveBackend(language string) (backend.LanguageBackend, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -242,13 +242,14 @@ func (s *Server) ResolveBackend(language string) (backend.LanguageBackend, error
 // establishProject handles the shared state transition when a project is opened or created.
 func (s *Server) establishProject(ctx context.Context, absRoot string, backends []backend.LanguageBackend) string {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.projectOpen = true
 	s.projectRoot = absRoot
 	s.activeBackends = make(map[string]backend.LanguageBackend)
 	for _, be := range backends {
 		s.activeBackends[be.Name()] = be
 	}
-	s.mu.Unlock()
 
 	// Eager LSP initialization
 	for _, be := range backends {
@@ -256,7 +257,7 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	}
 
 	// Update tools list
-	s.RegisterHandlers()
+	s.registerHandlersLocked()
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Project established at %s\n", absRoot))
@@ -289,14 +290,14 @@ func (s *Server) ForFile(ctx context.Context, path string) backend.LanguageBacke
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.projectOpen {
-		s.mu.Unlock()
 		return be
 	}
 
 	_, active := s.activeBackends[be.Name()]
 	if active {
-		s.mu.Unlock()
 		return be
 	}
 
@@ -304,10 +305,9 @@ func (s *Server) ForFile(ctx context.Context, path string) backend.LanguageBacke
 	log.Printf("Dynamically activating backend: %s", be.Name())
 	s.activeBackends[be.Name()] = be
 	root := s.projectRoot
-	s.mu.Unlock()
 
 	s.startLSP(ctx, be, root)
-	s.RegisterHandlers() // Re-register to potentially surface new tools
+	s.registerHandlersLocked() // Re-register to potentially surface new tools
 
 	return be
 }
@@ -370,11 +370,11 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 	s.projectOpen = false
 	s.projectRoot = ""
 	s.activeBackends = make(map[string]backend.LanguageBackend)
+	s.registerHandlersLocked()
 	s.mu.Unlock()
 
-	s.RegisterHandlers()
-
 	return &mcp.CallToolResult{
+
 		Content: []mcp.Content{&mcp.TextContent{Text: "Project closed. Returned to lobby."}},
 	}, nil, nil
 }

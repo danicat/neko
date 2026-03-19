@@ -51,6 +51,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	// Outline Mode
 	if args.Outline && args.StartLine == 0 && be != nil {
+
 		out, err := be.Outline(ctx, absPath)
 		if err != nil {
 			return errorResult(fmt.Sprintf("failed to generate outline: %v", err)), nil, nil

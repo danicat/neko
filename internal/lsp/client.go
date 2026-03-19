@@ -27,16 +27,21 @@ type Client struct {
 	pending  map[int64]chan *jsonrpcResponse
 	opened   map[string]int // URIs of opened documents → version
 	rootURI  string
+	rootPath string
 	langID   string
 	options  map[string]interface{}
-	done     chan struct{}
+
+	done      chan struct{}
 	closeOnce sync.Once
 }
 
 // NewClient starts an LSP server and initializes the connection.
 // langID is the LSP language identifier (e.g. "go", "python", "javascript").
 func NewClient(ctx context.Context, command string, args []string, workspaceRoot string, langID string, options map[string]interface{}) (*Client, error) {
-	cmd := exec.CommandContext(ctx, command, args...)
+	// We don't use exec.CommandContext(ctx) here because the LSP server should
+	// outlive the context of the request that triggered its start.
+	// The client is closed explicitly via Close().
+	cmd := exec.Command(command, args...)
 	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
@@ -55,15 +60,17 @@ func NewClient(ctx context.Context, command string, args []string, workspaceRoot
 	absRoot, _ := filepath.Abs(workspaceRoot)
 
 	c := &Client{
-		cmd:     cmd,
-		stdin:   stdin,
-		reader:  bufio.NewReader(stdout),
-		pending: make(map[int64]chan *jsonrpcResponse),
-		opened:  make(map[string]int),
-		rootURI: fileURI(absRoot),
-		langID:  langID,
-		options: options,
-		done:    make(chan struct{}),
+		cmd:      cmd,
+		stdin:    stdin,
+		reader:   bufio.NewReader(stdout),
+		pending:  make(map[int64]chan *jsonrpcResponse),
+		opened:   make(map[string]int),
+		rootURI:  fileURI(absRoot),
+		rootPath: absRoot,
+		langID:   langID,
+		options:  options,
+
+		done: make(chan struct{}),
 	}
 
 	go c.readLoop()
@@ -252,15 +259,29 @@ func FormatLocations(locations []Location) string {
 func (c *Client) initialize(ctx context.Context) error {
 	params := InitializeParams{
 		ProcessID: os.Getpid(),
+		RootPath:  c.rootPath,
 		RootURI:   c.rootURI,
+		ClientInfo: &ClientInfo{
+			Name:    "neko",
+			Version: "0.1.0",
+		},
 		Capabilities: ClientCapabilities{
 			TextDocument: TextDocumentClientCapabilities{
 				Hover: &HoverClientCapabilities{
 					ContentFormat: []string{"markdown", "plaintext"},
 				},
+				Definition: &DefinitionClientCapabilities{
+					LinkSupport: true,
+				},
 			},
 		},
 		InitializationOptions: c.options,
+		WorkspaceFolders: []WorkspaceFolder{
+			{
+				URI:  c.rootURI,
+				Name: filepath.Base(c.rootPath),
+			},
+		},
 	}
 
 	result, err := c.call(ctx, "initialize", params)
@@ -471,7 +492,11 @@ func (c *Client) readMessage() (json.RawMessage, error) {
 
 func fileURI(path string) string {
 	absPath, _ := filepath.Abs(path)
-	return "file://" + url.PathEscape(absPath)
+	u := &url.URL{
+		Scheme: "file",
+		Path:   absPath,
+	}
+	return u.String()
 }
 
 func uriToPath(uri string) string {
