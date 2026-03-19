@@ -1,4 +1,6 @@
 # .goreleaser.yaml
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
 version: 2
 
 before:
@@ -14,7 +16,6 @@ builds:
       - windows
       - darwin
     main: ./cmd/neko
-    binary: bin/neko
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -26,8 +27,13 @@ archives:
       - goos: windows
         format: zip
     files:
+      - gemini-extension.json
+      - NEKO.md
+      - DOCUMENTATION.md
       - README.md
-      - LICENSE
+      - CHANGELOG.md
+      - plugins/**/*
+      - skills/**/*
 
 changelog:
   sort: asc
