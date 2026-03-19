@@ -55,9 +55,9 @@ const goCodeReviewPrompt = `You are conducting a senior-level Go code review. Ap
 - Indent error flow: handle error first, keep happy path at minimal indent
 
 ## After Review
-- Run smart_build to verify all fixes compile and tests pass.
+- Run build to verify all fixes compile and tests pass.
 - Run modernize_code to catch outdated patterns.
-- For an unbiased second opinion from a different model, use code_review.`
+- For an unbiased second opinion from a different model, use review_code.`
 
 // GoImportThis creates the definition for the Go 'import_this' prompt.
 func GoImportThis() *mcp.Prompt {

@@ -66,7 +66,7 @@ type Suggestion struct {
 	Comment    string `json:"comment"`
 }
 
-// Result defines the structured output for the code_review tool.
+// Result defines the structured output for the review_code tool.
 type Result struct {
 	Suggestions []Suggestion `json:"suggestions"`
 }

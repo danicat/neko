@@ -1,4 +1,4 @@
-// Package project implements the project_init tool.
+// Package project implements the create_project tool.
 package project
 
 import (

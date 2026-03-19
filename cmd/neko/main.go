@@ -46,10 +46,10 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Check for AI credentials and disable code_review if missing
+	// Check for AI credentials and disable review_code if missing
 	if os.Getenv("GOOGLE_API_KEY") == "" && os.Getenv("GEMINI_API_KEY") == "" &&
 		os.Getenv("GOOGLE_GENAI_USE_VERTEXAI") == "" {
-		cfg.DisableTool("code_review")
+		cfg.DisableTool("review_code")
 	}
 
 	if cfg.Version {

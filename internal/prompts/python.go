@@ -68,9 +68,9 @@ const pythonCodeReviewPrompt = `You are conducting a senior-level Python code re
 - Are SQL queries parameterized, not formatted?
 
 ## After Review
-- Run smart_build to verify all fixes pass format, lint, type check, and tests.
+- Run build to verify all fixes pass format, lint, type check, and tests.
 - Run modernize_code to catch outdated patterns.
-- For an unbiased second opinion from a different model, use code_review.`
+- For an unbiased second opinion from a different model, use review_code.`
 
 // PythonImportThis creates the definition for the Python 'import_this' prompt.
 func PythonImportThis() *mcp.Prompt {

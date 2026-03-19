@@ -5,19 +5,15 @@ Neko is an intelligent, language-aware development Model Context Protocol (MCP) 
 ## Table of Contents
 1. [Prerequisites](#prerequisites)
 2. [Installation](#installation)
-3. [Core Capabilities](#core-capabilities)
-4. [Language Support](#language-support)
-    - [Go](#go)
-    - [Python](#python)
-    - [JavaScript/TypeScript](#javascript-typescript)
-5. [Extending Neko (Plugin System)](#extending-neko-plugin-system)
-6. [Architecture](#architecture)
+3. [Project Lifecycle](#project-lifecycle)
+4. [Tool Reference](#tool-reference)
+5. [Language Support](#language-support)
+6. [Extending Neko (Plugin System)](#extending-neko-plugin-system)
+7. [Architecture](#architecture)
 
 ---
 
 ## Prerequisites
-
-To use Neko effectively, ensure the following tools are installed on your system:
 
 ### Mandatory
 - **Go 1.22+**: Required to build and run the server.
@@ -26,7 +22,7 @@ To use Neko effectively, ensure the following tools are installed on your system
 ### Recommended (for specific language support)
 - **gopls**: For Go language intelligence (LSP).
 - **Node.js & npm**: For JavaScript/TypeScript support (via the default plugin).
-- **ruff, mypy, pytest**: These are automatically managed by `uv` within Python projects but are essential for the quality gate.
+- **ruff, mypy, pytest**: Automatically managed by `uv` within Python projects but essential for the quality gate.
 
 ---
 
@@ -42,7 +38,7 @@ cd neko
 ```bash
 make build
 ```
-This will create the `neko` executable in the `bin/` directory.
+This creates the `neko` executable in the `bin/` directory.
 
 ### 3. Configure your MCP client
 Add Neko to your MCP configuration (e.g., in Claude Desktop or Gemini CLI):
@@ -58,19 +54,128 @@ Add Neko to your MCP configuration (e.g., in Claude Desktop or Gemini CLI):
 }
 ```
 
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--version` | Print version and exit |
+| `--agents` | Print agent instructions and exit |
+| `--list-tools` | List available tools and exit |
+| `--listen ADDR` | Start HTTP server (e.g., `127.0.0.1:8080`) |
+| `--model MODEL` | Default Gemini model for code review |
+| `--allow TOOLS` | Comma-separated list of allowed tools |
+| `--disable TOOLS` | Comma-separated list of disabled tools |
+| `--plugins DIR` | Plugin directory path |
+
 ---
 
-## Core Capabilities
+## Project Lifecycle
 
-Neko provides a suite of tools designed for a high-quality development lifecycle:
+Neko enforces a two-phase lifecycle using MCP's `notifications/tools/list_changed` capability. The AI agent cannot see or call engineering tools until it has established a project context.
 
-- **`list_files`**: Context-aware file listing (respects `.gitignore`).
-- **`smart_read`**: Reads files with optional AST-based outlining to save tokens.
-- **`smart_edit`**: Precision editing with fuzzy matching, syntax validation, and auto-formatting.
-- **`smart_build`**: A universal "Quality Gate" that runs the language-appropriate Build -> Test -> Lint pipeline.
-- **`project_init`**: Bootstraps new projects with idiomatic structures.
-- **`add_dependency`**: Installs packages and immediately returns their documentation.
-- **LSP Tools**: `find_definition`, `find_references`, and `symbol_info` for deep code intelligence.
+```
+[LOBBY]  ──open_project──►  [PROJECT OPEN]  ──close_project──►  [LOBBY]
+         ──create_project──►
+```
+
+### Lobby Phase
+
+Only two tools are available:
+
+| Tool | Purpose |
+|------|---------|
+| `open_project` | Open an existing project directory, detect languages, start LSP servers |
+| `create_project` | Bootstrap a new project with idiomatic structure and dependencies |
+
+### Project Open Phase
+
+After opening a project, Neko scans for language markers (`go.mod`, `pyproject.toml`, `package.json`) and activates the corresponding backends. Tools are registered based on the **union of capabilities** of all active backends.
+
+#### Always Enabled (Backend-Agnostic)
+
+These tools work on any file type and provide graceful degradation when no backend is available.
+
+| Tool | Purpose |
+|------|---------|
+| `close_project` | Return to lobby, shut down LSP servers |
+| `list_files` | Navigate project (respects .gitignore) |
+| `read_file` | Read with optional outline/imports |
+| `edit_file` | Smart edit with validation and formatting |
+| `create_file` | Create file with idiomatic formatting |
+| `review_code` | AI-powered idiomatic review |
+
+#### Capability-Dependent
+
+These tools are only registered if at least one active backend supports the underlying feature.
+
+| Tool | Required Capability | Description |
+|------|---------------------|-------------|
+| `build` | `toolchain` | Universal quality gate: build, test, lint |
+| `read_docs` | `documentation` | Fetch API docs for any package or symbol |
+| `add_dependencies` | `dependencies` | Install packages and return their docs |
+| `modernize_code` | `modernize` | Upgrade legacy patterns to modern standards |
+| `test_mutations` | `mutation_test` | Mutation testing to measure test quality |
+| `query_tests` | `test_query` | SQL queries over test results and coverage |
+| `describe` | `lsp` | Type info and docs for a symbol at a position |
+| `find_definition` | `lsp` | Jump to a symbol's definition |
+| `find_references` | `lsp` | Find all references to a symbol |
+
+### Dynamic Backend Activation
+
+When a tool operates on a file whose extension matches a non-active backend, that backend is activated dynamically ("on-touch"). This ensures polyglot repos work seamlessly without requiring all languages to be detected up front.
+
+---
+
+## Tool Reference
+
+### Argument Standards
+
+All tools use consistent argument names:
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a specific source file |
+| `dir` | Path to a directory (defaults to project root) |
+| `language` | Explicit backend selector. Optional when only one backend is active; required when ambiguous |
+| `packages` | List of packages for dependency tools |
+| `dependencies` | List of initial dependencies for project creation |
+
+### Navigation
+
+- **`list_files(dir, depth)`**: Recursively list source files while filtering build artifacts. Respects `.gitignore`.
+- **`read_file(file, outline, start_line, end_line)`**: Structure-aware file reader.
+  - **Outline mode** (`outline=true`): Returns AST-based type and function signatures to save tokens.
+  - **Snippet mode** (`start_line`, `end_line`): Targeted line range reading.
+  - **Full read**: Returns content with line numbers and imported package documentation.
+
+### Editing
+
+- **`edit_file(file, old_content, new_content)`**: Intelligent editor with safety guarantees.
+  - **Fuzzy matching**: Locates target blocks despite minor whitespace differences.
+  - **Safety gate**: Validates syntax and auto-formats before committing to disk. Rolls back on failure.
+  - **Append mode**: Leave `old_content` empty to append to end of file.
+  - **Line isolation**: Use `start_line`/`end_line` to restrict search scope.
+- **`create_file(file, content)`**: Creates a file with automatic parent directory creation and language-specific formatting.
+
+### Toolchain
+
+- **`build(dir, language)`**: The quality gate. Runs the language-appropriate Build -> Test -> Lint pipeline.
+- **`read_docs(import_path, symbol, language)`**: Fetch documentation for any package or symbol.
+- **`add_dependencies(packages, language)`**: Install packages and return their API documentation.
+- **`create_project(dir, language, dependencies)`**: Bootstrap a new project with idiomatic structure.
+- **`modernize_code(dir, language, fix)`**: Upgrade legacy patterns to modern standards.
+
+### Code Intelligence (LSP)
+
+- **`describe(file, line, col)`**: Returns type information and documentation for a symbol. Maps to `textDocument/hover`.
+- **`find_definition(file, line, col)`**: Jumps to a symbol's definition. Maps to `textDocument/definition`.
+- **`find_references(file, line, col)`**: Finds all references across the codebase. Maps to `textDocument/references`.
+
+### Testing
+
+- **`test_mutations(dir, language)`**: Mutation testing to objectively measure test suite quality.
+- **`query_tests(query, language)`**: SQL queries over test results and coverage data.
+- **`review_code(file)`**: AI-powered architectural and idiomatic review.
 
 ---
 
@@ -78,76 +183,124 @@ Neko provides a suite of tools designed for a high-quality development lifecycle
 
 ### Go
 - **Backend**: Native (internal).
-- **Tools**: Uses `go mod`, `go vet`, and `go test`.
-- **LSP**: Invokes `gopls`.
-- **Special Features**: `test_query` allows SQL querying of test results and coverage.
+- **Capabilities**: All (toolchain, documentation, dependencies, modernize, mutation_test, test_query, lsp).
+- **LSP**: `gopls`.
+- **Special Features**: `query_tests` enables SQL querying of test results and coverage data.
 
 ### Python
 - **Backend**: Native (internal).
-- **Requirement**: **Standardized on `uv`**. Neko does not support global/system packages or manual `venv` management.
-- **Tools**: Every operation (`ruff`, `mypy`, `pytest`) is executed via `uv run` to ensure project-local consistency.
-- **Initialization**: Uses `uv init` to create a modern Python project structure.
+- **Capabilities**: toolchain, documentation, dependencies, modernize, mutation_test, lsp.
+- **Requirement**: Standardized on `uv`. Every operation (`ruff`, `mypy`, `pytest`) runs via `uv run`.
+- **LSP**: `uv run pylsp`.
+- **Initialization**: Uses `uv init` for modern Python project structure.
 
 ### JavaScript / TypeScript
 - **Backend**: Plugin-based (via `plugins/javascript.json`).
 - **Tools**: Uses `npm` and `node`.
+- **LSP**: `typescript-language-server`.
 - **Initialization**: Uses `npm init -y`.
-- **Intelligence**: Uses `typescript-language-server`.
 
 ---
 
 ## Extending Neko (Plugin System)
 
-Neko can be extended to support new languages without modifying the Go source code by adding a JSON configuration file to the `plugins/` directory.
+Add support for new languages by placing a JSON configuration file in the `plugins/` directory. No Go code changes required.
 
 ### Plugin Schema
 ```json
 {
-  "name": "language-name",
-  "extensions": [".ext1", ".ext2"],
-  "projectMarkers": ["project.file"],
-  "skipDirs": ["dir_to_ignore"],
+  "name": "rust",
+  "languageId": "rust",
+  "extensions": [".rs"],
+  "projectMarkers": ["Cargo.toml"],
+  "skipDirs": ["target"],
   "tier": 2,
   "lsp": {
-    "command": "server-binary",
-    "args": ["--stdio"]
+    "command": "rust-analyzer",
+    "args": [],
+    "initializationOptions": {}
   },
   "commands": {
-    "init": { "command": "cmd", "args": ["init", "{{dir}}"] },
-    "build": { "command": "cmd", "args": ["run", "build"] },
-    "test": { "command": "cmd", "args": ["test"] },
-    "format": { "command": "formatter", "args": ["{{filename}}"] },
-    "addDependency": { "command": "cmd", "args": ["install", "{{packages}}"] }
+    "build": { "command": "cargo", "args": ["build"] },
+    "test": { "command": "cargo", "args": ["test"] },
+    "validate": { "command": "cargo", "args": ["check", "{{filename}}"] },
+    "format": { "command": "rustfmt", "args": ["{{filename}}"] },
+    "fetchDocs": { "command": "rust-doc-fetch", "args": ["{{package}}", "{{symbol}}"] },
+    "addDependency": { "command": "cargo", "args": ["add", "{{packages...}}"] }
   }
 }
 ```
 
-### Key Placeholders
-- `{{dir}}`: The project root directory.
-- `{{filename}}`: The absolute path to the file being processed.
-- `{{packages}}`: Space-separated list of packages to install.
+### Placeholders
+| Placeholder | Description |
+|-------------|-------------|
+| `{{dir}}` | The project root directory |
+| `{{filename}}` | Absolute path to the file being processed |
+| `{{package}}` | Package name for documentation lookup |
+| `{{symbol}}` | Symbol name for documentation lookup |
+| `{{packages}}` | Space-separated list of packages |
+| `{{packages...}}` | Variadic: each package becomes a separate argument |
+
+### Capability Mapping
+
+Plugin capabilities are derived from the commands defined in the JSON:
+
+| Command | Capability |
+|---------|------------|
+| `build` or `buildSteps` | `toolchain` |
+| `fetchDocs` | `documentation` |
+| `addDependency` | `dependencies` |
+| `modernize` | `modernize` |
+| `mutationTest` | `mutation_test` |
+| `queryTestDB` | `test_query` |
+| `lsp` section defined | `lsp` |
+
+### Tier System
+
+Backends are prioritized by tier when multiple match a file extension:
+- **Tier 3**: Native backends (Go, Python)
+- **Tier 2**: Standard plugins
+- **Tier 0-1**: Low-priority or experimental plugins
 
 ---
 
 ## Architecture
 
-Neko is built on a modular "Backend" architecture:
+Neko is built on a modular backend architecture with a two-phase lifecycle:
 
-1. **Registry**: Discovers backends based on file extensions or project markers (`go.mod`, `pyproject.toml`, `package.json`).
-2. **LanguageBackends**: 
-    - **Internal**: Compiled-in backends for Go and Python for maximum performance and complex logic.
-    - **Plugin**: Dynamic backends loaded from JSON, mapping standard development tasks to shell commands.
-3. **LSP Manager**: Manages a pool of language servers, providing one instance per language per workspace root.
-4. **Tools**: The MCP-exposed interface that delegates work to the Registry.
+```
+┌─────────────────────────────────────────────────┐
+│                   MCP Server                     │
+│  ┌───────────┐  ┌────────────┐  ┌────────────┐  │
+│  │   Lobby   │  │  Project   │  │ Capability  │  │
+│  │  Phase    │──│  State     │──│  Scanner    │  │
+│  └───────────┘  └────────────┘  └────────────┘  │
+├─────────────────────────────────────────────────┤
+│              ResolveBackend(language)             │
+│  ┌──────────────────────────────────────────┐    │
+│  │            Backend Registry               │    │
+│  │  ┌────────┐  ┌────────┐  ┌────────────┐  │    │
+│  │  │   Go   │  │ Python │  │  Plugins   │  │    │
+│  │  │ (native)│  │(native)│  │  (JSON)    │  │    │
+│  │  └────────┘  └────────┘  └────────────┘  │    │
+│  └──────────────────────────────────────────┘    │
+├─────────────────────────────────────────────────┤
+│               LSP Manager                        │
+│  One client per language per workspace root      │
+└─────────────────────────────────────────────────┘
+```
 
----
+1. **MCP Server**: Manages the two-phase lifecycle (Lobby vs Project Open) and dynamic tool registration.
+2. **ResolveBackend**: Routes tool calls to the correct backend. Uses active project backends when a single language is active; requires an explicit `language` parameter when ambiguous.
+3. **Backend Registry**: Discovers and manages backends via `ForFile()` (file extension), `DetectBackends()` (project markers), and `Get()` (by name).
+4. **LSP Manager**: Manages a pool of language servers, one instance per language per workspace root. Eagerly initialized when a project is opened.
 
-## Quality Gate
+### Quality Gate
 
-The `smart_build` tool is the heart of Neko's reliability. It doesn't just run tests; it ensures:
+The `build` tool is the heart of Neko's reliability. It enforces:
 1. The code compiles.
-2. Coding standards are met (Linting).
+2. Coding standards are met (linting).
 3. Types are correct (where applicable).
 4. Tests pass with meaningful output.
 
-Validation is the only path to finality in Neko. Never assume a change is correct until the Quality Gate has passed.
+Validation is the only path to finality. Never assume a change is correct until the Quality Gate has passed.

@@ -1,15 +1,15 @@
-# Neko 🐈
+# Neko
 
 Neko is an intelligent, language-aware Model Context Protocol (MCP) server designed to empower AI agents with professional-grade software engineering tools.
 
-It standardizes code exploration, precision editing, and verification across multiple languages, ensuring that every code change is validated through a rigorous "Quality Gate".
+It standardizes code exploration, precision editing, and verification across multiple languages, ensuring that every code change is validated through a rigorous Quality Gate.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - **Go 1.22+** (to build the server)
 - **uv** (required for all Python operations)
-- **Node.js & npm** (for JavaScript/TypeScript support)
+- **Node.js & npm** (for JavaScript/TypeScript support via plugin)
 
 ### Installation
 1. **Build the binary:**
@@ -28,28 +28,41 @@ It standardizes code exploration, precision editing, and verification across mul
    }
    ```
 
-## 🧠 Core Philosophy
+## Core Philosophy
 
-1.  **Explore First**: Systematically map the codebase before acting.
-2.  **Precise Editing**: Targeted, surgical updates with syntax verification.
-3.  **The Quality Gate**: Build -> Test -> Lint must pass for every change.
-4.  **Idiomatic Excellence**: Leveraging modern patterns (e.g., `uv` for Python, `go mod` for Go).
+1.  **Project First**: Establish a project context before working. Neko operates in two phases — a Lobby for opening/creating projects, and a Project phase with the full toolset.
+2.  **Explore First**: Systematically map the codebase before acting.
+3.  **Precise Editing**: Targeted, surgical updates with syntax verification.
+4.  **The Quality Gate**: Build -> Test -> Lint must pass for every change.
+5.  **Language is a Property of the File**: Backends are resolved per-file, not per-directory, enabling seamless polyglot support.
 
-## 🛠️ Tool Highlights
+## Project Lifecycle
 
-- **`smart_read`**: AST-aware reading to maximize context efficiency.
-- **`smart_edit`**: Robust fuzzy matching for safe, multi-file editing.
-- **`smart_build`**: The universal quality gate for all supported languages.
-- **`project_init`**: Idiomatic project bootstrapping (e.g., `uv init`, `npm init`).
-- **LSP Integration**: Deep intelligence via `gopls` and `typescript-language-server`.
+Neko uses a two-phase lifecycle to ensure the AI agent always has a valid project context:
 
-## 📚 Documentation
+```
+[LOBBY]  ──open_project──►  [PROJECT OPEN]  ──close_project──►  [LOBBY]
+         ──create_project──►
+```
 
-For extensive details on setup, internal architecture, and how to extend Neko with new languages using the plugin system, see [DOCUMENTATION.md](./DOCUMENTATION.md).
+- **Lobby**: Only `open_project` and `create_project` are available.
+- **Project Open**: The full toolset is dynamically registered based on the languages detected in the project.
 
-## 🧩 Extension System
+## Tool Highlights
 
-Neko is highly extensible. Add support for new languages by simply dropping a JSON configuration into the `plugins/` directory. No Go code changes required.
+| Tool | Purpose |
+|------|---------|
+| `read_file` | AST-aware reading with outline mode to maximize context efficiency |
+| `edit_file` | Robust fuzzy matching for safe editing with syntax validation |
+| `build` | The universal quality gate for all supported languages |
+| `create_project` | Idiomatic project bootstrapping (e.g., `uv init`, `npm init`) |
+| `describe` | LSP-powered type info and documentation via `gopls`, `pylsp`, etc. |
+| `review_code` | AI-powered idiomatic code review |
 
----
-*Built with ❤️ by engineers for engineers.*
+## Documentation
+
+For setup details, architecture, and how to extend Neko with new languages using the plugin system, see [DOCUMENTATION.md](./DOCUMENTATION.md).
+
+## Extension System
+
+Neko is highly extensible. Add support for new languages by dropping a JSON configuration file into the `plugins/` directory. No Go code changes required.
