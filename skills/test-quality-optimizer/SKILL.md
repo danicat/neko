@@ -18,7 +18,7 @@ Code coverage only proves a line was *executed*. Mutation testing proves the lin
 First, determine where the tests are missing or blind.
 
 - **Go Projects**: Use `query_tests` to find uncovered blocks.
-  - *Action*: `query_tests(query="SELECT file, start_line, function_name FROM all_coverage WHERE count = 0 LIMIT 20")`
+  - *Action*: `query_tests(query="SELECT file, start_line, function_name FROM all_coverage WHERE count = 0")`
 - **Other Languages**: Use the `build()` report to find packages with < 80% coverage.
 
 ### 2. Find the Weaknesses (Mutation)
