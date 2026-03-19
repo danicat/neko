@@ -73,7 +73,7 @@ func main() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res, _, err := editHandler(context.TODO(), nil, Params{
-				File:   filePath,
+				File:       filePath,
 				OldContent: tt.search,
 				NewContent: tt.replace,
 			}, &testServer{reg: reg})
@@ -116,7 +116,7 @@ func TestEdit_Broken(t *testing.T) {
 
 	// Invalid Syntax
 	res, _, _ := editHandler(context.TODO(), nil, Params{
-		File:   filePath,
+		File:       filePath,
 		OldContent: "func main() {}",
 		NewContent: "func main() { invalid syntax }",
 	}, &testServer{reg: reg})

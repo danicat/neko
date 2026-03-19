@@ -37,6 +37,7 @@ const (
 	CapMutationTest  Capability = "mutation_test"
 	CapTestQuery     Capability = "test_query"
 	CapLSP           Capability = "lsp"
+	CapReview        Capability = "review"
 )
 
 // LanguageBackend defines the interface every language must implement.

@@ -38,8 +38,8 @@ func TestCreate(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "lib.go")
 
 	res, _, _ := createHandler(context.TODO(), nil, Params{
-		File: filePath,
-		Content:  "package lib\n\nfunc A() {}",
+		File:    filePath,
+		Content: "package lib\n\nfunc A() {}",
 	}, &testServer{reg: reg})
 	if res.IsError {
 		t.Fatalf("Initial write failed: %v", res.Content[0].(*mcp.TextContent).Text)
@@ -70,8 +70,8 @@ func TestCreate_Validation(t *testing.T) {
 
 	// Valid syntax with missing import (goimports should add it)
 	res, _, _ := createHandler(context.TODO(), nil, Params{
-		File: filePath,
-		Content:  "package main\n\nfunc main() { fmt.Println(NonExistent) }",
+		File:    filePath,
+		Content: "package main\n\nfunc main() { fmt.Println(NonExistent) }",
 	}, &testServer{reg: reg})
 
 	output := res.Content[0].(*mcp.TextContent).Text
@@ -81,8 +81,8 @@ func TestCreate_Validation(t *testing.T) {
 
 	// Invalid syntax
 	resErr, _, _ := createHandler(context.TODO(), nil, Params{
-		File: filePath,
-		Content:  "package main\n\nfunc main() { this is invalid syntax }",
+		File:    filePath,
+		Content: "package main\n\nfunc main() { this is invalid syntax }",
 	}, &testServer{reg: reg})
 	outputErr := resErr.Content[0].(*mcp.TextContent).Text
 	if !strings.Contains(outputErr, "WARNING") {
