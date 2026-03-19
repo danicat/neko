@@ -28,8 +28,8 @@ func (b *Backend) LSPCommand() (string, []string, bool) {
 	return "gopls", nil, true
 }
 
-func (b *Backend) InitializationOptions() map[string]interface{} {
-	return map[string]interface{}{
+func (b *Backend) InitializationOptions() map[string]any {
+	return map[string]any{
 		"build.directoryFilters":        []string{"-node_modules", "-vendor"},
 		"ui.completion.usePlaceholders": true,
 		"ui.diagnostic.staticcheck":     true,

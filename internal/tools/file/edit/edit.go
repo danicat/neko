@@ -177,8 +177,8 @@ func findBestMatch(content, search string) (int, int, float64) {
 	}
 	normContent := string(normContentRunes)
 
-	if idx := strings.Index(normContent, normSearch); idx != -1 {
-		runeIdx := len([]rune(normContent[:idx]))
+	if before, _, ok := strings.Cut(normContent, normSearch); ok {
+		runeIdx := len([]rune(before))
 		start := mapped[runeIdx].offset
 		end := mapped[runeIdx+len([]rune(normSearch))-1].offset + 1
 		return start, end, 1.0
@@ -237,10 +237,7 @@ func findBestMatch(content, search string) (int, int, float64) {
 	bestEndIdx := 0
 
 	for startIdx := range candidates {
-		endIdx := startIdx + searchLen
-		if endIdx > len(normContentRunes) {
-			endIdx = len(normContentRunes)
-		}
+		endIdx := min(startIdx+searchLen, len(normContentRunes))
 		window := string(normContentRunes[startIdx:endIdx])
 		score := similarity(normSearch, window)
 		if score > bestScore {

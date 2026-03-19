@@ -25,7 +25,7 @@ var DefaultManager = NewManager()
 
 // ClientFor returns an LSP client for the given language and workspace root.
 // It creates and caches clients lazily.
-func (m *Manager) ClientFor(ctx context.Context, lang, workspaceRoot, command string, args []string, langID string, options map[string]interface{}) (*Client, error) {
+func (m *Manager) ClientFor(ctx context.Context, lang, workspaceRoot, command string, args []string, langID string, options map[string]any) (*Client, error) {
 	key := lang + ":" + workspaceRoot
 
 	m.mu.Lock()

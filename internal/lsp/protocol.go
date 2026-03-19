@@ -74,13 +74,13 @@ type Diagnostic struct {
 
 // InitializeParams for the initialize request.
 type InitializeParams struct {
-	ProcessID             int                    `json:"processId"`
-	RootPath              string                 `json:"rootPath,omitempty"`
-	RootURI               string                 `json:"rootUri"`
-	ClientInfo            *ClientInfo            `json:"clientInfo,omitempty"`
-	Capabilities          ClientCapabilities     `json:"capabilities"`
-	InitializationOptions map[string]interface{} `json:"initializationOptions,omitempty"`
-	WorkspaceFolders      []WorkspaceFolder      `json:"workspaceFolders,omitempty"`
+	ProcessID             int                `json:"processId"`
+	RootPath              string             `json:"rootPath,omitempty"`
+	RootURI               string             `json:"rootUri"`
+	ClientInfo            *ClientInfo        `json:"clientInfo,omitempty"`
+	Capabilities          ClientCapabilities `json:"capabilities"`
+	InitializationOptions map[string]any     `json:"initializationOptions,omitempty"`
+	WorkspaceFolders      []WorkspaceFolder  `json:"workspaceFolders,omitempty"`
 }
 
 // ClientInfo defines information about the client.
@@ -97,7 +97,7 @@ type WorkspaceFolder struct {
 
 // ClientCapabilities defines the client's capabilities.
 type ClientCapabilities struct {
-	TextDocument TextDocumentClientCapabilities `json:"textDocument,omitempty"`
+	TextDocument TextDocumentClientCapabilities `json:"textDocument"`
 }
 
 // TextDocumentClientCapabilities defines text document capabilities.
@@ -123,9 +123,9 @@ type InitializeResult struct {
 
 // ServerCapabilities defines what the server can do.
 type ServerCapabilities struct {
-	HoverProvider      interface{} `json:"hoverProvider,omitempty"`
-	DefinitionProvider interface{} `json:"definitionProvider,omitempty"`
-	ReferencesProvider interface{} `json:"referencesProvider,omitempty"`
+	HoverProvider      any `json:"hoverProvider,omitempty"`
+	DefinitionProvider any `json:"definitionProvider,omitempty"`
+	ReferencesProvider any `json:"referencesProvider,omitempty"`
 }
 
 // DidOpenTextDocumentParams for textDocument/didOpen.
@@ -159,16 +159,16 @@ type DidCloseTextDocumentParams struct {
 // JSON-RPC types.
 
 type jsonrpcRequest struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      int64       `json:"id"`
-	Method  string      `json:"method"`
-	Params  interface{} `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	ID      int64  `json:"id"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 type jsonrpcNotification struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Method  string      `json:"method"`
-	Params  interface{} `json:"params,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
 }
 
 type jsonrpcResponse struct {

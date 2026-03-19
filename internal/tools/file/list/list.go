@@ -81,7 +81,7 @@ func tryGitLsFiles(ctx context.Context, absRoot string, maxDepth int) (*mcp.Call
 	dirsSeen := make(map[string]bool)
 	const maxFiles = 1000
 
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
 		}

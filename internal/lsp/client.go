@@ -29,7 +29,7 @@ type Client struct {
 	rootURI  string
 	rootPath string
 	langID   string
-	options  map[string]interface{}
+	options  map[string]any
 
 	done      chan struct{}
 	closeOnce sync.Once
@@ -37,7 +37,7 @@ type Client struct {
 
 // NewClient starts an LSP server and initializes the connection.
 // langID is the LSP language identifier (e.g. "go", "python", "javascript").
-func NewClient(ctx context.Context, command string, args []string, workspaceRoot string, langID string, options map[string]interface{}) (*Client, error) {
+func NewClient(ctx context.Context, command string, args []string, workspaceRoot string, langID string, options map[string]any) (*Client, error) {
 	// We don't use exec.CommandContext(ctx) here because the LSP server should
 	// outlive the context of the request that triggered its start.
 	// The client is closed explicitly via Close().
@@ -364,7 +364,7 @@ func (c *Client) ensureOpen(ctx context.Context, file string) (string, error) {
 	return uri, nil
 }
 
-func (c *Client) call(ctx context.Context, method string, params interface{}) (json.RawMessage, error) {
+func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := c.nextID.Add(1)
 
 	ch := make(chan *jsonrpcResponse, 1)
@@ -402,7 +402,7 @@ func (c *Client) call(ctx context.Context, method string, params interface{}) (j
 	}
 }
 
-func (c *Client) notify(method string, params interface{}) error {
+func (c *Client) notify(method string, params any) error {
 	msg := jsonrpcNotification{
 		JSONRPC: "2.0",
 		Method:  method,
@@ -411,7 +411,7 @@ func (c *Client) notify(method string, params interface{}) error {
 	return c.send(msg)
 }
 
-func (c *Client) send(msg interface{}) error {
+func (c *Client) send(msg any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -500,8 +500,8 @@ func fileURI(path string) string {
 }
 
 func uriToPath(uri string) string {
-	if strings.HasPrefix(uri, "file://") {
-		path := strings.TrimPrefix(uri, "file://")
+	if after, ok := strings.CutPrefix(uri, "file://"); ok {
+		path := after
 		if decoded, err := url.PathUnescape(path); err == nil {
 			return decoded
 		}

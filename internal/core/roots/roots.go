@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -30,10 +31,8 @@ func (s *State) Add(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, r := range s.roots {
-		if r == abs {
-			return
-		}
+	if slices.Contains(s.roots, abs) {
+		return
 	}
 	s.roots = append(s.roots, abs)
 }
@@ -64,8 +63,8 @@ func (s *State) Sync(ctx context.Context, session *mcp.ServerSession) {
 
 	var rts []string
 	for _, r := range res.Roots {
-		if strings.HasPrefix(r.URI, "file://") {
-			path := strings.TrimPrefix(r.URI, "file://")
+		if after, ok := strings.CutPrefix(r.URI, "file://"); ok {
+			path := after
 			abs, err := filepath.Abs(path)
 			if err == nil {
 				rts = append(rts, abs)

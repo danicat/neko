@@ -586,7 +586,7 @@ func suggestPackages(ctx context.Context, query string) []string {
 	seen := make(map[string]bool)
 
 	add := func(out []byte) {
-		for _, pkg := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		for pkg := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 			if pkg != "" && !seen[pkg] {
 				candidates = append(candidates, pkg)
 				seen[pkg] = true

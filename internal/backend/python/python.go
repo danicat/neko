@@ -26,7 +26,7 @@ func (b *Backend) LSPCommand() (string, []string, bool) {
 	return "uv", []string{"run", "pylsp"}, true
 }
 
-func (b *Backend) InitializationOptions() map[string]interface{} {
+func (b *Backend) InitializationOptions() map[string]any {
 	return nil
 }
 
@@ -122,8 +122,8 @@ func extractPydocSummary(pydocOutput string) string {
 		}
 		if inName && trimmed != "" {
 			// The NAME section line is like: "    flask - A microframework..."
-			if idx := strings.Index(trimmed, " - "); idx >= 0 {
-				desc := trimmed[idx+3:]
+			if _, after, ok := strings.Cut(trimmed, " - "); ok {
+				desc := after
 				if len(desc) > 200 {
 					desc = desc[:197] + "..."
 				}

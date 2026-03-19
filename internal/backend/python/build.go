@@ -108,8 +108,8 @@ func pythonBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*back
 				isError = true
 			} else {
 				sb.WriteString("✅ PASS\n\n")
-				lines := strings.Split(testOut, "\n")
-				for _, line := range lines {
+				lines := strings.SplitSeq(testOut, "\n")
+				for line := range lines {
 					if strings.Contains(line, "passed") || strings.Contains(line, "failed") {
 						sb.WriteString(fmt.Sprintf("Summary: %s\n", strings.TrimSpace(line)))
 						break

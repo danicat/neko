@@ -20,9 +20,9 @@ type CommandConfig struct {
 
 // LSPConfig defines how to start an LSP server.
 type LSPConfig struct {
-	Command               string                 `json:"command"`
-	Args                  []string               `json:"args"`
-	InitializationOptions map[string]interface{} `json:"initializationOptions,omitempty"`
+	Command               string         `json:"command"`
+	Args                  []string       `json:"args"`
+	InitializationOptions map[string]any `json:"initializationOptions,omitempty"`
 }
 
 // Plugin defines a language plugin from a JSON configuration.
@@ -109,7 +109,7 @@ func (b *PluginBackend) LSPCommand() (string, []string, bool) {
 	return b.plugin.LSP.Command, b.plugin.LSP.Args, true
 }
 
-func (b *PluginBackend) InitializationOptions() map[string]interface{} {
+func (b *PluginBackend) InitializationOptions() map[string]any {
 	if b.plugin.LSP != nil {
 		return b.plugin.LSP.InitializationOptions
 	}
@@ -150,7 +150,7 @@ func expandArgs(templateArgs []string, vars map[string]string) []string {
 			}
 			placeholder := "{{" + k + "}}"
 			if arg == placeholder {
-				for _, part := range strings.Fields(v) {
+				for part := range strings.FieldsSeq(v) {
 					result = append(result, part)
 				}
 				expanded = true
@@ -202,7 +202,7 @@ func (b *PluginBackend) ParseImports(ctx context.Context, filename string) ([]st
 	var imports []string
 	if err := json.Unmarshal([]byte(out), &imports); err != nil {
 		// Fallback: line-delimited output
-		for _, line := range strings.Split(out, "\n") {
+		for line := range strings.SplitSeq(out, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if trimmed != "" {
 				imports = append(imports, trimmed)

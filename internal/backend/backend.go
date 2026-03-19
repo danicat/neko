@@ -70,7 +70,7 @@ type LanguageBackend interface {
 
 	// LSP
 	LSPCommand() (command string, args []string, ok bool)
-	InitializationOptions() map[string]interface{}
+	InitializationOptions() map[string]any
 
 	// Metadata
 	LanguageID() string
