@@ -31,12 +31,13 @@ func Register(mcpServer *mcp.Server, s Server) {
 
 // Params defines the input parameters.
 type Params struct {
-	Dir      string `json:"dir,omitempty" jsonschema:"Directory to build in (default: current)"`
-	Language string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
-	Packages string `json:"packages,omitempty" jsonschema:"Packages to check (default: . or ./...)"`
-	RunTests *bool  `json:"run_tests,omitempty" jsonschema:"Run unit tests (default: true)"`
-	RunLint  *bool  `json:"run_lint,omitempty" jsonschema:"Run linter (default: true)"`
-	AutoFix  *bool  `json:"auto_fix,omitempty" jsonschema:"Auto-fix format and lint issues (default: true)"`
+	Dir          string `json:"dir,omitempty" jsonschema:"Directory to build in (default: current)"`
+	Language     string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
+	Packages     string `json:"packages,omitempty" jsonschema:"Packages to check (default: . or ./...)"`
+	RunTests     *bool  `json:"run_tests,omitempty" jsonschema:"Run unit tests (default: true)"`
+	RunLint      *bool  `json:"run_lint,omitempty" jsonschema:"Run linter (default: true)"`
+	AutoFix      *bool  `json:"auto_fix,omitempty" jsonschema:"Auto-fix format and lint issues (default: true)"`
+	RunModernize *bool  `json:"run_modernize,omitempty" jsonschema:"Run modernization check (default: true)"`
 }
 
 func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
@@ -61,6 +62,10 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 	if args.AutoFix != nil {
 		autoFix = *args.AutoFix
 	}
+	runModernize := true
+	if args.RunModernize != nil {
+		runModernize = *args.RunModernize
+	}
 
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
@@ -68,10 +73,11 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 	}
 
 	report, err := be.BuildPipeline(ctx, absDir, backend.BuildOpts{
-		Packages: args.Packages,
-		RunTests: runTests,
-		RunLint:  runLint,
-		AutoFix:  autoFix,
+		Packages:     args.Packages,
+		RunTests:     runTests,
+		RunLint:      runLint,
+		AutoFix:      autoFix,
+		RunModernize: runModernize,
 	})
 	if err != nil {
 		return result(fmt.Sprintf("build pipeline error: %v", err), true), nil, nil

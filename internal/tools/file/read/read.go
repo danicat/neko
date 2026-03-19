@@ -18,6 +18,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	ShouldShowDoc(language, pkg string) bool
 }
 
 // Register registers the read_file tool with the server.
@@ -137,11 +138,21 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		imports, parseErr := be.ParseImports(ctx, absPath)
 		if parseErr == nil && len(imports) > 0 {
 			if importDocs, err := be.ImportDocs(ctx, imports); err == nil && len(importDocs) > 0 {
-				sb.WriteString("## Imported Packages\n")
-				for _, pd := range importDocs {
-					sb.WriteString(pd + "\n")
+				var filteredDocs []string
+				for i, pd := range importDocs {
+					pkg := strings.Trim(imports[i], "\"")
+					if s.ShouldShowDoc(be.Name(), pkg) {
+						filteredDocs = append(filteredDocs, pd)
+					}
 				}
-				sb.WriteString("\n")
+
+				if len(filteredDocs) > 0 {
+					sb.WriteString("## Imported Packages\n")
+					for _, pd := range filteredDocs {
+						sb.WriteString(pd + "\n")
+					}
+					sb.WriteString("\n")
+				}
 			}
 		}
 	}

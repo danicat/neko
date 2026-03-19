@@ -22,7 +22,6 @@ import (
 	"github.com/danicat/neko/internal/tools/lang/definition"
 	"github.com/danicat/neko/internal/tools/lang/docs"
 	"github.com/danicat/neko/internal/tools/lang/get"
-	"github.com/danicat/neko/internal/tools/lang/modernize"
 	"github.com/danicat/neko/internal/tools/lang/mutation"
 	"github.com/danicat/neko/internal/tools/lang/project"
 	"github.com/danicat/neko/internal/tools/lang/quality"
@@ -44,6 +43,7 @@ type Server struct {
 	projectOpen    bool
 	projectRoot    string
 	activeBackends map[string]backend.LanguageBackend // keyed by Name()
+	seenDocs       map[string]map[string]bool
 }
 
 // New creates a new Server instance with the given registry and config.
@@ -53,6 +53,7 @@ func New(cfg *config.Config, version string, reg *backend.Registry) *Server {
 		registry:        reg,
 		registeredTools: make(map[string]bool),
 		activeBackends:  make(map[string]backend.LanguageBackend),
+		seenDocs:        make(map[string]map[string]bool),
 	}
 
 	mcpServer := mcp.NewServer(&mcp.Implementation{
@@ -126,7 +127,7 @@ func (s *Server) RegisterHandlers() error {
 func (s *Server) registerHandlersLocked() error {
 	if !s.projectOpen {
 		// Lobby Phase
-		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "modernize_code", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code")
+		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code")
 
 		mcp.AddTool(s.mcpServer, &mcp.Tool{
 			Name:        "open_project",
@@ -181,9 +182,6 @@ func (s *Server) registerHandlersLocked() error {
 		if caps[backend.CapDependencies] {
 			get.Register(s.mcpServer, s)
 		}
-		if caps[backend.CapModernize] {
-			modernize.Register(s.mcpServer, s)
-		}
 		if caps[backend.CapMutationTest] {
 			mutation.Register(s.mcpServer, s)
 		}
@@ -203,6 +201,24 @@ func (s *Server) registerHandlersLocked() error {
 // Registry returns the backend registry for external access.
 func (s *Server) Registry() *backend.Registry {
 	return s.registry
+}
+
+// ShouldShowDoc returns true if the documentation for the given package in the given language has not been shown yet.
+// It also marks the package as shown.
+func (s *Server) ShouldShowDoc(language, pkg string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seenDocs == nil {
+		s.seenDocs = make(map[string]map[string]bool)
+	}
+	if s.seenDocs[language] == nil {
+		s.seenDocs[language] = make(map[string]bool)
+	}
+	if s.seenDocs[language][pkg] {
+		return false
+	}
+	s.seenDocs[language][pkg] = true
+	return true
 }
 
 // ResolveBackend returns the appropriate backend for a language-aware tool.
@@ -247,6 +263,7 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	s.projectOpen = true
 	s.projectRoot = absRoot
 	s.activeBackends = make(map[string]backend.LanguageBackend)
+	s.seenDocs = make(map[string]map[string]bool)
 	for _, be := range backends {
 		s.activeBackends[be.Name()] = be
 	}
@@ -370,6 +387,7 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 	s.projectOpen = false
 	s.projectRoot = ""
 	s.activeBackends = make(map[string]backend.LanguageBackend)
+	s.seenDocs = make(map[string]map[string]bool)
 	s.registerHandlersLocked()
 	s.mu.Unlock()
 

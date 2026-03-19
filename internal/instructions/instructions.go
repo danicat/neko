@@ -71,9 +71,6 @@ func Get(cfg *config.Config, reg *backend.Registry) string {
 	if isEnabled("review_code") {
 		sb.WriteString(toolnames.Registry["review_code"].Instruction + "\n")
 	}
-	if isEnabled("modernize_code") {
-		sb.WriteString(toolnames.Registry["modernize_code"].Instruction + "\n")
-	}
 	sb.WriteString("\n")
 
 	// LSP

@@ -14,11 +14,26 @@ import (
 )
 
 type testServer struct {
-	reg *backend.Registry
+	reg      *backend.Registry
+	seenDocs map[string]map[string]bool
 }
 
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
 	return ts.reg.ForFile(path)
+}
+
+func (ts *testServer) ShouldShowDoc(lang, pkg string) bool {
+	if ts.seenDocs == nil {
+		ts.seenDocs = make(map[string]map[string]bool)
+	}
+	if ts.seenDocs[lang] == nil {
+		ts.seenDocs[lang] = make(map[string]bool)
+	}
+	if ts.seenDocs[lang][pkg] {
+		return false
+	}
+	ts.seenDocs[lang][pkg] = true
+	return true
 }
 
 func TestRead(t *testing.T) {
@@ -70,6 +85,20 @@ func main() {
 	output := res.Content[0].(*mcp.TextContent).Text
 	if !strings.Contains(output, "fmt.Println") {
 		t.Errorf("expected source content, got: %s", output)
+	}
+
+	// Read again, documentation should be gone from output (if it was there)
+	// Note: in tests, godoc.Load might fail if not connected to internet or if pkgs not found
+	// but we want to check if ShouldShowDoc was called.
+	if s.seenDocs["go"] == nil || !s.seenDocs["go"]["fmt"] {
+		t.Log("fmt (go) was not marked as seen, maybe ImportDocs failed (which is fine in tests)")
+	} else {
+		// Try reading again
+		res2, _, _ := readHandler(context.Background(), nil, Params{File: srcFile}, s)
+		output2 := res2.Content[0].(*mcp.TextContent).Text
+		if strings.Contains(output2, "## Imported Packages") && strings.Contains(output2, "fmt") {
+			t.Errorf("expected documentation for fmt to be memoized and not shown again")
+		}
 	}
 }
 

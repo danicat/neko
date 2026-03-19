@@ -77,6 +77,23 @@ func pythonBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*back
 		sb.WriteString("✅ PASS\n\n")
 	}
 
+	if opts.RunModernize {
+		sb.WriteString("### 🚀 Modernize: ")
+		modOut, modErr := pythonModernize(ctx, dir, opts.AutoFix)
+		if modErr != nil {
+			sb.WriteString("⚠️ FAILED\n\n")
+			sb.WriteString(formatOutput(modErr.Error()))
+		} else if strings.Contains(modOut, "No outdated patterns found") || modOut == "" {
+			sb.WriteString("✅ PASS\n\n")
+		} else {
+			sb.WriteString("📝 ISSUES FOUND\n\n")
+			sb.WriteString(formatOutput(modOut))
+			if opts.AutoFix {
+				sb.WriteString("\n✅ Auto-fixed modernization issues.\n\n")
+			}
+		}
+	}
+
 	if opts.RunTests {
 		sb.WriteString("### 🧪 Tests: ")
 		// First try to collect to see if there are any tests

@@ -38,7 +38,7 @@ Neko operates in two phases:
 -   **`create_file(file, content)`**: Initialize new files with automated parent directory creation and language-specific formatting.
 
 ### Toolchain & Intelligence
--   **`build(dir, language)`**: Universal quality gate. Runs build, tests, and linting.
+-   **`build(dir, language, auto_fix, run_modernize)`**: Universal quality gate. Runs build, modernization, tests, and linting. Set `run_modernize=true` to check for outdated patterns.
 -   **`add_dependencies(packages, language)`**: Adds packages to an **existing** project and immediately delivers their documentation.
 -   **`read_docs(import_path, symbol, language)`**: Instant access to authoritative documentation for any package or symbol.
 -   **`describe(file, line, col)`**: Get type information and documentation for a symbol at a position.
@@ -47,7 +47,6 @@ Neko operates in two phases:
 
 ### Testing & Analysis
 -   **`query_tests(query, language)`**: Query test results and coverage data using SQL.
--   **`modernize_code(dir, language, fix)`**: Automatically upgrades legacy patterns to modern standards.
 -   **`test_mutations(dir, language)`**: Measures test suite quality by introducing small code mutations.
 -   **`review_code(file)`**: AI-powered architectural and idiomatic review.
 

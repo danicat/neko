@@ -38,6 +38,24 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 	}
 	sb.WriteString("✅ PASS\n\n")
 
+	// 2.1 Modernize
+	if opts.RunModernize {
+		sb.WriteString("### 🚀 Modernize: ")
+		modOut, modErr := goModernize(ctx, dir, opts.AutoFix)
+		if modErr != nil {
+			sb.WriteString("⚠️ FAILED\n\n")
+			sb.WriteString(goFormatOutput(modOut))
+		} else if strings.Contains(modOut, "No issues found") || modOut == "" {
+			sb.WriteString("✅ PASS\n\n")
+		} else {
+			sb.WriteString("📝 ISSUES FOUND\n\n")
+			sb.WriteString(goFormatOutput(modOut))
+			if opts.AutoFix {
+				sb.WriteString("\n✅ Auto-fixed modernization issues.\n\n")
+			}
+		}
+	}
+
 	// 3. Tests
 	if opts.RunTests {
 		sb.WriteString("### 🧪 Tests: ")
@@ -69,22 +87,59 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 		}
 
 		lines := strings.Split(testOut, "\n")
-		hasCoverage := false
+		var coveredPkgs []string
+		var zeroPkgs []string
+
 		for _, line := range lines {
+			parts := strings.Fields(line)
+			if len(parts) < 2 {
+				continue
+			}
+
 			if strings.Contains(line, "\tcoverage: ") {
-				parts := strings.Fields(line)
-				if len(parts) >= 5 {
-					pkg := parts[1]
-					covStr := parts[4]
-					if covStr != "0.0%" && covStr != "[no" {
-						if !hasCoverage {
-							sb.WriteString("- **Packages**:\n")
-							hasCoverage = true
-						}
-						sb.WriteString(fmt.Sprintf("  - `%s`: %s\n", pkg, covStr))
+				covIdx := -1
+				for i, p := range parts {
+					if p == "coverage:" {
+						covIdx = i
+						break
 					}
 				}
+
+				if covIdx > 1 {
+					pkg := parts[1]
+					covStr := ""
+					if covIdx+1 < len(parts) {
+						covStr = parts[covIdx+1]
+					}
+
+					if covStr == "0.0%" {
+						zeroPkgs = append(zeroPkgs, pkg)
+					} else if covStr != "" {
+						coveredPkgs = append(coveredPkgs, fmt.Sprintf("  - `%s`: %s", pkg, covStr))
+					}
+				}
+			} else if strings.Contains(line, "[no test files]") {
+				pkg := parts[1]
+				zeroPkgs = append(zeroPkgs, pkg)
 			}
+		}
+
+		if len(coveredPkgs) > 0 {
+			sb.WriteString("- **Packages**:\n")
+			for _, p := range coveredPkgs {
+				sb.WriteString(p + "\n")
+			}
+		}
+
+		if len(zeroPkgs) > 0 {
+			sb.WriteString("- **Zero Coverage / No Tests**: ")
+			for i, pkg := range zeroPkgs {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(fmt.Sprintf("`%s`", pkg))
+			}
+			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
 	}

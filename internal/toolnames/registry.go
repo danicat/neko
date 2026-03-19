@@ -78,12 +78,6 @@ var Registry = map[string]ToolDef{
 		Description: "Manages package installation and manifest updates. Consolidates the workflow by immediately returning the public API documentation for the installed packages.",
 		Instruction: "*   **`add_dependencies`**: Install dependencies and fetch documentation.\n    *   **Usage:** `add_dependencies(packages=[\"github.com/gin-gonic/gin@latest\"], language=\"go\")`\n    *   **Outcome:** Dependency added and API documentation returned.",
 	},
-	"modernize_code": {
-		Name:        "modernize_code",
-		Title:       "Modernize Code",
-		Description: "Analyzes the codebase for outdated patterns and automatically refactors them to modern standards. Improves maintainability and performance by applying idiomatic upgrades.",
-		Instruction: "*   **`modernize_code`**: Automatically upgrade legacy patterns.\n    *   **Usage:** `modernize_code(dir=\".\", language=\"go\", fix=true)`\n    *   **Outcome:** Source code refactored to modern standards.",
-	},
 
 	// --- TESTING ---
 	"test_mutations": {

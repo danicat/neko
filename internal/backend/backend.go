@@ -7,10 +7,11 @@ import (
 
 // BuildOpts holds options for the build pipeline.
 type BuildOpts struct {
-	Packages string
-	RunTests bool
-	RunLint  bool
-	AutoFix  bool
+	Packages     string
+	RunTests     bool
+	RunLint      bool
+	AutoFix      bool
+	RunModernize bool
 }
 
 // BuildReport contains the results of a build pipeline run.
