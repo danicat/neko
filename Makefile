@@ -11,7 +11,7 @@ SERVER_BINARY_NAME=neko
 SERVER_BINARY=$(BINARY_DIR)/$(SERVER_BINARY_NAME)
 
 # Version
-VERSION := 0.1.0
+VERSION := 0.1.1
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 

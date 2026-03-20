@@ -5,7 +5,7 @@
   "contextFileName": "NEKO.md",
   "mcpServers": {
     "neko": {
-      "command": "${extensionPath}/bin/neko",
+      "command": "${extensionPath}/neko",
       "args": ["-plugins", "${extensionPath}/plugins"]
     }
   }
