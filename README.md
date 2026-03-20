@@ -1,8 +1,8 @@
 # Neko
 
-Neko is an intelligent, language-aware Model Context Protocol (MCP) server designed to empower AI agents with professional-grade software engineering tools.
+Neko is a **Semantic Operating System** for AI agents, built on the Model Context Protocol (MCP). It moves beyond simple file manipulation by providing a deterministic, LSP-first refactoring engine and intent-based discovery via local RAG.
 
-It standardizes code exploration, precision editing, and verification across multiple languages, ensuring that every code change is validated through a rigorous Quality Gate.
+It standardizes code exploration, precision editing, and verification across multiple languages, ensuring that every code change is validated through a rigorous **Full Disclosure** diagnostic loop.
 
 ## Quick Start
 
@@ -28,13 +28,12 @@ It standardizes code exploration, precision editing, and verification across mul
    }
    ```
 
-## Core Philosophy
+## Core Philosophy (v0.2.0)
 
-1.  **Project First**: Establish a project context before working. Neko operates in two phases — a Lobby for opening/creating projects, and a Project phase with the full toolset.
-2.  **Explore First**: Systematically map the codebase before acting.
-3.  **Precise Editing**: Targeted, surgical updates with syntax verification.
-4.  **The Quality Gate**: Build -> Test -> Lint must pass for every change.
-5.  **Language is a Property of the File**: Backends are resolved per-file, not per-directory, enabling seamless polyglot support.
+1.  **Semantic Integrity**: Every edit or creation triggers a synchronous re-evaluation of the entire project health via the Language Server Protocol (LSP).
+2.  **Full Reality Disclosure**: Neko never prunes or hides errors. The agent is always confronted with the *Total Reality* of the project's semantic state.
+3.  **Intent-Based Discovery**: Local Retrieval-Augmented Generation (RAG) allows agents to find patterns and logic by *meaning* rather than just keywords.
+4.  **Turn-Level Certainty**: Neko tools block until the semantic outcome of an action is known, ensuring the agent's next thought is based on accurate reality.
 
 ## Project Lifecycle
 
@@ -52,12 +51,13 @@ Neko uses a two-phase lifecycle to ensure the AI agent always has a valid projec
 
 | Tool | Purpose |
 |------|---------|
-| `read_file` | AST-aware reading with outline mode and session-based documentation memoization |
-| `edit_file` | Robust fuzzy matching for safe editing with syntax validation and auto-formatting |
-| `build` | The universal quality gate (Build -> Modernize -> Test -> Lint) |
-| `create_project` | Idiomatic project bootstrapping (e.g., `uv init`, `npm init`) |
-| `describe` | LSP-powered type info and documentation via `gopls`, `pylsp`, etc. |
-| `review_code` | AI-powered idiomatic code review |
+| `edit_file` | LSP-aware editing with automated formatting, import cleanup, and synchronous diagnostics. |
+| `multi_edit` | Transactional batch editing across multiple files in a single turn. |
+| `rename_symbol` | Deterministic, project-wide symbol renaming via LSP. |
+| `semantic_search` | Intent-based discovery using a local vector database (`chromem-go`). |
+| `read_file` | Enhanced reading with virtual semantic annotations (inline type signatures). |
+| `build` | The universal quality gate with automatic LSP synchronization. |
+| `describe` | Contextual type info and documentation via LSP `hover`. |
 
 ## Documentation
 

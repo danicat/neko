@@ -2,6 +2,7 @@ package create
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,6 +21,28 @@ type testServer struct {
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
 	return ts.reg.ForFile(path)
 }
+
+func (ts *testServer) RAG() *rag.Engine {
+	return nil
+}
+
+type noLSPBackend struct {
+	golang.Backend
+}
+
+func (b *noLSPBackend) LSPCommand() (string, []string, bool) {
+	return "", nil, false
+}
+
+func (b *noLSPBackend) Validate(ctx context.Context, file string) error {
+	content, _ := os.ReadFile(file)
+	if strings.Contains(string(content), "invalid syntax") {
+		return fmt.Errorf("mock syntax error at line 1")
+	}
+	return nil
+}
+
+func (b *noLSPBackend) Name() string { return "nolsp" }
 
 func TestCreate(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "create-test-*")
@@ -64,14 +88,14 @@ func TestCreate_Validation(t *testing.T) {
 	}
 
 	reg := backend.NewRegistry()
-	reg.Register(golang.New())
+	reg.Register(&noLSPBackend{})
 
 	filePath := filepath.Join(tmpDir, "main.go")
 
 	// Valid syntax with missing import (goimports should add it)
 	res, _, _ := createHandler(context.TODO(), nil, Params{
 		File:    filePath,
-		Content: "package main\n\nfunc main() { fmt.Println(NonExistent) }",
+		Content: "package main\n\nfunc main() { fmt.Println() }",
 	}, &testServer{reg: reg})
 
 	output := res.Content[0].(*mcp.TextContent).Text
@@ -79,11 +103,15 @@ func TestCreate_Validation(t *testing.T) {
 		t.Errorf("unexpected warning for valid syntax: %s", output)
 	}
 
-	// Invalid syntax
+	// Invalid syntax - in v0.2.0, we don't block on syntax, but we report it via LSP diagnostics.
+	// Since testServer has no LSP, it should fall back to backend.Validate and show a WARNING.
 	resErr, _, _ := createHandler(context.TODO(), nil, Params{
 		File:    filePath,
-		Content: "package main\n\nfunc main() { this is invalid syntax }",
+		Content: "package main\n\nfunc main() { invalid syntax }",
 	}, &testServer{reg: reg})
+	if resErr.IsError {
+		t.Errorf("expected success despite invalid syntax, got error: %s", resErr.Content[0].(*mcp.TextContent).Text)
+	}
 	outputErr := resErr.Content[0].(*mcp.TextContent).Text
 	if !strings.Contains(outputErr, "WARNING") {
 		t.Errorf("expected syntax check warning, got: %s", outputErr)

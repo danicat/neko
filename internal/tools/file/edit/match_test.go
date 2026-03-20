@@ -99,7 +99,15 @@ func TestFindBestMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			start, end, score := findBestMatch(tt.content, tt.search)
+			matches := findMatches(tt.content, tt.search)
+			
+			var score float64
+			var start, end int
+			if len(matches) > 0 {
+				score = matches[0].Score
+				start = matches[0].Start
+				end = matches[0].End
+			}
 
 			if !tt.expectMatch {
 				if score > 0.6 {

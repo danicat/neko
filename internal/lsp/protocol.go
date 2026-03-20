@@ -21,6 +21,18 @@ type Location struct {
 	Range Range  `json:"range"`
 }
 
+// TextEdit is a change to a text document.
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
+// WorkspaceEdit represents changes to many resources managed in the workspace.
+type WorkspaceEdit struct {
+	Changes         map[string][]TextEdit `json:"changes,omitempty"`
+	DocumentChanges []json.RawMessage     `json:"documentChanges,omitempty"`
+}
+
 // TextDocumentIdentifier identifies a text document by its URI.
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`
@@ -64,12 +76,99 @@ type ReferenceParams struct {
 	Context      ReferenceContext       `json:"context"`
 }
 
+// CodeActionParams for textDocument/codeAction.
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+type CodeActionContext struct {
+	Diagnostics []Diagnostic `json:"diagnostics"`
+	Only        []string     `json:"only,omitempty"`
+}
+
+// CodeAction representing a change.
+type CodeAction struct {
+	Title       string         `json:"title"`
+	Kind        string         `json:"kind,omitempty"`
+	Edit        *WorkspaceEdit `json:"edit,omitempty"`
+	Command     *Command       `json:"command,omitempty"`
+	IsPreferred bool           `json:"isPreferred,omitempty"`
+}
+
+type Command struct {
+	Title     string            `json:"title"`
+	Command   string            `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+// DocumentFormattingParams for textDocument/formatting.
+type DocumentFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Options      FormattingOptions      `json:"options"`
+}
+
+type FormattingOptions struct {
+	TabSize      int  `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
+}
+
+// RenameParams for textDocument/rename.
+type RenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	NewName      string                 `json:"newName"`
+}
+
+// DocumentSymbolParams for textDocument/documentSymbol.
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// DocumentSymbol representing programming constructs like variables, classes, interfaces etc.
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           int              `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
 // Diagnostic represents a diagnostic, such as a compiler error or warning.
 type Diagnostic struct {
 	Range    Range  `json:"range"`
 	Severity int    `json:"severity"`
 	Source   string `json:"source,omitempty"`
 	Message  string `json:"message"`
+}
+
+// PublishDiagnosticsParams for textDocument/publishDiagnostics.
+type PublishDiagnosticsParams struct {
+	URI         string       `json:"uri"`
+	Version     int          `json:"version,omitempty"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// WorkspaceDiagnosticParams for workspace/diagnostic.
+type WorkspaceDiagnosticParams struct {
+	Identifier       string `json:"identifier,omitempty"`
+	PreviousResultID string `json:"previousResultId,omitempty"`
+}
+
+// WorkspaceDiagnosticReport for workspace/diagnostic.
+type WorkspaceDiagnosticReport struct {
+	Items []WorkspaceDocumentDiagnosticReport `json:"items"`
+}
+
+// WorkspaceDocumentDiagnosticReport for workspace/diagnostic.
+type WorkspaceDocumentDiagnosticReport struct {
+	URI      string       `json:"uri"`
+	Version  int          `json:"version,omitempty"`
+	Kind     string       `json:"kind"` // "full" or "unchanged"
+	ResultID string       `json:"resultId,omitempty"`
+	Items    []Diagnostic `json:"items,omitempty"`
 }
 
 // InitializeParams for the initialize request.
@@ -104,6 +203,7 @@ type ClientCapabilities struct {
 type TextDocumentClientCapabilities struct {
 	Hover      *HoverClientCapabilities      `json:"hover,omitempty"`
 	Definition *DefinitionClientCapabilities `json:"definition,omitempty"`
+	Diagnostic any                           `json:"diagnostic,omitempty"`
 }
 
 // HoverClientCapabilities defines hover-specific capabilities.
@@ -126,6 +226,7 @@ type ServerCapabilities struct {
 	HoverProvider      any `json:"hoverProvider,omitempty"`
 	DefinitionProvider any `json:"definitionProvider,omitempty"`
 	ReferencesProvider any `json:"referencesProvider,omitempty"`
+	DiagnosticProvider any `json:"diagnosticProvider,omitempty"`
 }
 
 // DidOpenTextDocumentParams for textDocument/didOpen.
@@ -154,6 +255,22 @@ type DidChangeTextDocumentParams struct {
 // DidCloseTextDocumentParams for textDocument/didClose.
 type DidCloseTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// DidSaveTextDocumentParams for textDocument/didSave.
+type DidSaveTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Text         *string                `json:"text,omitempty"`
+}
+
+// DidChangeWatchedFilesParams for workspace/didChangeWatchedFiles.
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}
+
+type FileEvent struct {
+	URI  string `json:"uri"`
+	Type int    `json:"type"` // 1: Created, 2: Changed, 3: Deleted
 }
 
 // JSON-RPC types.

@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
+	"github.com/danicat/neko/internal/core/rag"
+	"github.com/danicat/neko/internal/core/roots"
+	"github.com/danicat/neko/internal/lsp"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -16,6 +19,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	RAG() *rag.Engine
 }
 
 // Register registers the create_file tool with the server.
@@ -41,6 +45,12 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		return errorResult("name (file path) cannot be empty"), nil, nil
 	}
 
+	absPath, err := roots.Global.Validate(args.File)
+	if err != nil {
+		return errorResult(err.Error()), nil, nil
+	}
+	args.File = absPath
+
 	finalContent := []byte(args.Content)
 
 	//nolint:gosec // G301
@@ -48,41 +58,88 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		return errorResult(fmt.Sprintf("failed to create directory: %v", err)), nil, nil
 	}
 
+	be := s.ForFile(ctx, args.File)
+	var lspClient *lsp.Client
+	if be != nil {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
+		}
+	}
+
+	if lspClient != nil {
+		// Prepare content (format/organize imports if possible before writing)
+		lspClient.DidOpen(ctx, args.File, args.Content)
+
+		content := args.Content
+		if edits, err := lspClient.OrganizeImports(ctx, args.File); err == nil && len(edits) > 0 {
+			content = lsp.ApplyTextEdits(content, edits)
+			lspClient.DidChange(ctx, args.File, content)
+		}
+		if edits, err := lspClient.Format(ctx, args.File); err == nil && len(edits) > 0 {
+			content = lsp.ApplyTextEdits(content, edits)
+			lspClient.DidChange(ctx, args.File, content)
+		}
+		finalContent = []byte(content)
+	}
+
+	// 1. Direct Write
 	//nolint:gosec // G306
 	if err := os.WriteFile(args.File, finalContent, 0644); err != nil {
 		return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
 	}
 
-	be := s.ForFile(ctx, args.File)
 	var warning string
+	if lspClient != nil {
+		// 2. didChangeWatchedFiles (Trigger indexing for new file)
+		lspClient.DidChangeWatchedFiles(ctx, args.File, 1) // 1: Created
 
-	if be != nil {
+		// 3. didSave
+		lspClient.DidSave(ctx, args.File, string(finalContent))
 
-		if fmtErr := be.Format(ctx, args.File); fmtErr != nil {
-			warning = fmt.Sprintf("\n\n**WARNING:** formatting failed: %v", fmtErr)
-		}
+		// 4. WaitForDiagnostics
+		lspClient.WaitForDiagnostics(ctx, args.File)
+	} else if be != nil {
+		// Manual validation fallback for non-LSP backends or when LSP is down
 		if err := be.Validate(ctx, args.File); err != nil {
-			warning += fmt.Sprintf("\n\n**WARNING:** Post-write syntax check failed: %v", err)
-		}
-		if formatted, err := os.ReadFile(args.File); err == nil {
-			finalContent = formatted
+			warning = fmt.Sprintf("\n\n**WARNING:** Post-write syntax check failed: %v", err)
 		}
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Successfully wrote `%s` (%d bytes)", args.File, len(finalContent)))
-	if be != nil {
-		sb.WriteString(fmt.Sprintf("\n- ✅ %s format (auto-format)", be.Name()))
-		sb.WriteString("\n- ✅ syntax verification")
-	} else {
-		sb.WriteString("\n- Note: Syntax validation and formatting skipped for this file type.")
+	// Synchronous RAG Re-indexing
+	if engine := s.RAG(); engine != nil {
+		var symbols []lsp.DocumentSymbol
+		if lspClient != nil {
+			symbols, _ = lspClient.DocumentSymbol(ctx, args.File)
+		}
+		var imports []string
+		if be != nil {
+			imports, _ = be.ParseImports(ctx, args.File)
+		}
+		engine.IngestFile(ctx, args.File, string(finalContent), symbols, imports)
 	}
-	if warning != "" {
-		sb.WriteString(warning)
+
+	if lspClient != nil {
+		// 5. didClose
+		lspClient.DidClose(ctx, args.File)
+	}
+
+	// Standardized Markdown Response
+	var resSb strings.Builder
+	resSb.WriteString(fmt.Sprintf("### ✅ File Created: %s\n", args.File))
+
+	if lspClient != nil {
+		allDiags := lspClient.GetAllDiagnostics()
+		resSb.WriteString(lsp.FormatDiagnostics(allDiags))
+	} else {
+		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")
+		if warning != "" {
+			resSb.WriteString(warning)
+		}
 	}
 
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
+		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
 	}, nil, nil
 }
 

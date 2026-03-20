@@ -11,7 +11,15 @@ func FuzzFindBestMatch(f *testing.F) {
 	f.Add("", "")
 
 	f.Fuzz(func(t *testing.T, content, search string) {
-		start, end, score := findBestMatch(content, search)
+		matches := findMatches(content, search)
+
+		var score float64
+		var start, end int
+		if len(matches) > 0 {
+			score = matches[0].Score
+			start = matches[0].Start
+			end = matches[0].End
+		}
 
 		if score < 0.0 || score > 1.0 {
 			t.Errorf("Score out of range: %f", score)
@@ -42,7 +50,11 @@ func FuzzFindBestMatch_Exact(f *testing.F) {
 
 		content := prefix + target + suffix
 
-		_, _, score := findBestMatch(content, target)
+		matches := findMatches(content, target)
+		var score float64
+		if len(matches) > 0 {
+			score = matches[0].Score
+		}
 		if score < 0.99 {
 			t.Errorf("Failed to find exact match.\nContent: %q\nSearch: %q\nScore: %f", content, target, score)
 		}

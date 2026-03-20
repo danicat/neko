@@ -71,7 +71,7 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 		return errorResult(fmt.Sprintf("references lookup failed: %v", err)), nil, nil
 	}
 
-	text := fmt.Sprintf("Found %d reference(s):\n%s", len(locations), lsp.FormatLocations(locations))
+	text := fmt.Sprintf("Found %d reference(s):\n\n%s", len(locations), client.EnrichLocations(ctx, locations))
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: text}},
 	}, nil, nil

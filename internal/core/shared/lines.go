@@ -2,8 +2,27 @@ package shared
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 )
+
+// regex for common compiler error formats
+var (
+	// Go: filename.go:12:3: error message
+	goErrorRegex = regexp.MustCompile(`:(\d+):(\d+):`)
+	// Python: File "filename.py", line 12
+	pythonErrorRegex = regexp.MustCompile(`line (\d+)`)
+	// General fallback: anything followed by a colon and a number
+	genericErrorRegex = regexp.MustCompile(`:(\d+)`)
+
+	nekoTagRegex = regexp.MustCompile(`(?s)<NEKO>.*?</NEKO>`)
+)
+
+// StripNekoTags removes all <NEKO>...</NEKO> tags from the given string.
+func StripNekoTags(s string) string {
+	return nekoTagRegex.ReplaceAllString(s, "")
+}
 
 // GetLineOffsets calculates the byte offsets for a given line range.
 // line numbers are 1-based.
@@ -65,19 +84,30 @@ func GetSnippet(content string, lineNum int) string {
 // and returns a snippet of the content around that line.
 func ExtractErrorSnippet(content string, err error) string {
 	errMsg := err.Error()
-	parts := strings.Split(errMsg, ":")
 
 	var lineNum int
-	for _, part := range parts {
-		var n int
-		if _, e := fmt.Sscanf(strings.TrimSpace(part), "%d", &n); e == nil {
-			lineNum = n
-			break
+
+	// Try Go format
+	if matches := goErrorRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
+		lineNum, _ = strconv.Atoi(matches[1])
+	}
+
+	// Try Python format
+	if lineNum == 0 {
+		if matches := pythonErrorRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
+			lineNum, _ = strconv.Atoi(matches[1])
+		}
+	}
+
+	// Try generic format
+	if lineNum == 0 {
+		if matches := genericErrorRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
+			lineNum, _ = strconv.Atoi(matches[1])
 		}
 	}
 
 	if lineNum == 0 {
-		return "Could not determine error line."
+		return "Could not determine error line from message: " + errMsg
 	}
 
 	return GetSnippet(content, lineNum)

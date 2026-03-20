@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/core/shared"
+	"github.com/danicat/neko/internal/lsp"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -19,6 +21,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ShouldShowDoc(language, pkg string) bool
+	RAG() *rag.Engine
 }
 
 // Register registers the read_file tool with the server.
@@ -51,12 +54,34 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	be := s.ForFile(ctx, absPath)
 
 	// Outline Mode
-	if args.Outline && args.StartLine == 0 && be != nil {
-
-		out, err := be.Outline(ctx, absPath)
-		if err != nil {
-			return errorResult(fmt.Sprintf("failed to generate outline: %v", err)), nil, nil
+	if args.Outline && args.StartLine == 0 {
+		var out string
+		var lspClient *lsp.Client
+		if be != nil {
+			if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+				workspaceRoot, _ := roots.Global.Validate(".")
+				if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
+					lspClient = client
+					symbols, err := lspClient.DocumentSymbol(ctx, absPath)
+					if err == nil && len(symbols) > 0 {
+						out = lsp.FormatSymbols(symbols)
+					}
+				}
+			}
 		}
+
+		// Fallback to backend parser if LSP failed or not available
+		if out == "" && be != nil {
+			out, err = be.Outline(ctx, absPath)
+			if err != nil {
+				return errorResult(fmt.Sprintf("failed to generate outline: %v", err)), nil, nil
+			}
+		}
+
+		if out == "" {
+			return errorResult("outline not supported for this file type"), nil, nil
+		}
+
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("# File: %s (Outline)\n\n", absPath))
 		sb.WriteString("```")
@@ -65,12 +90,17 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		sb.WriteString(out)
 		sb.WriteString("\n```\n")
 
+		if lspClient != nil {
+			lspClient.DidClose(ctx, absPath)
+		}
+
 		// Show third-party imports if available
-		// Both backends' ParseImports return only third-party imports
-		if imports, err := be.ParseImports(ctx, absPath); err == nil && len(imports) > 0 {
-			sb.WriteString("\n## Third-Party Imports\n")
-			for _, imp := range imports {
-				sb.WriteString(fmt.Sprintf("- %s\n", imp))
+		if be != nil {
+			if imports, err := be.ParseImports(ctx, absPath); err == nil && len(imports) > 0 {
+				sb.WriteString("\n## Third-Party Imports\n")
+				for _, imp := range imports {
+					sb.WriteString(fmt.Sprintf("- %s\n", imp))
+				}
 			}
 		}
 
@@ -87,6 +117,18 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	}
 
 	original := string(content)
+
+	// Warm-start LSP
+	var lspClient *lsp.Client
+	if be != nil {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
+				lspClient = client
+				lspClient.DidOpen(ctx, absPath, original)
+			}
+		}
+	}
 
 	startLine := args.StartLine
 	if startLine <= 0 {
@@ -107,7 +149,31 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	var contentWithLines strings.Builder
 	for i, line := range lines {
-		contentWithLines.WriteString(fmt.Sprintf("%4d | %s\n", startLine+i, line))
+		lineNum := startLine + i
+		annotatedLine := line
+		if lspClient != nil {
+			// Fetch symbols for this specific line
+			symbols, _ := lspClient.DocumentSymbol(ctx, absPath)
+			for _, s := range symbols {
+				if s.Range.Start.Line+1 == lineNum {
+					if s.Kind == 12 || s.Kind == 6 || s.Kind == 13 { // Func, Method, Variable
+						hover, _ := lspClient.Hover(ctx, absPath, lineNum, s.Range.Start.Character+1)
+						if hover != nil {
+							sig := lsp.HoverText(hover)
+							sigLines := strings.Split(sig, "\n")
+							if len(sigLines) > 0 {
+								cleanSig := strings.TrimSpace(strings.Trim(sigLines[0], "`"))
+								// Skip common primitives
+								if cleanSig != "string" && cleanSig != "int" && cleanSig != "error" && cleanSig != "bool" {
+									annotatedLine = fmt.Sprintf("%s <NEKO>type: %s</NEKO>", annotatedLine, cleanSig)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		contentWithLines.WriteString(fmt.Sprintf("%4d | %s\n", lineNum, annotatedLine))
 	}
 
 	isPartial := args.StartLine > 1 || args.EndLine > 0
@@ -131,6 +197,12 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	if isPartial {
 		sb.WriteString("*Note: Partial read - analysis skipped.*\n\n")
+	}
+
+	if lspClient != nil {
+		sb.WriteString("--- \n💡 **NOTE**: Lines containing `<NEKO>...</NEKO>` are virtual semantic annotations. They do not exist on disk and will be automatically ignored during edits.\n\n")
+		// relinquished session
+		lspClient.DidClose(ctx, absPath)
 	}
 
 	// Import analysis for full reads

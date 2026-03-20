@@ -138,23 +138,24 @@ All tools use consistent argument names:
 ### Navigation
 
 - **`list_files(dir, depth)`**: Recursively list source files while filtering build artifacts. Respects `.gitignore`.
-- **`read_file(file, outline, start_line, end_line)`**: Structure-aware file reader.
-  - **Outline mode** (`outline=true`): Returns AST-based type and function signatures to save tokens.
+- **`read_file(file, start_line, end_line)`**: Enhanced file reader.
+  - **Semantic Annotations**: Automatically injects type-signature metadata using `<NEKO>` tags.
   - **Snippet mode** (`start_line`, `end_line`): Targeted line range reading.
   - **Full read**: Returns content with line numbers and imported package documentation.
+- **`semantic_search(query, limit)`**: Intent-based discovery using a local vector database. Returns ranked code chunks by meaning.
 
 ### Editing
 
 - **`edit_file(file, old_content, new_content)`**: Intelligent editor with safety guarantees.
-  - **Fuzzy matching**: Locates target blocks despite minor whitespace differences.
-  - **Safety gate**: Validates syntax and auto-formats before committing to disk. Rolls back on failure.
-  - **Append mode**: Leave `old_content` empty to append to end of file.
-  - **Line isolation**: Use `start_line`/`end_line` to restrict search scope.
-- **`create_file(file, content)`**: Creates a file with automatic parent directory creation and language-specific formatting.
+  - **Fuzzy matching**: Locates target blocks despite minor whitespace differences. Returns ranked suggestions on failure.
+  - **LSP Lifecycle**: Synchronizes with LSP and returns full project diagnostics.
+  - **Automated Actions**: Automatically organizes imports and formats code on save.
+- **`multi_edit(edits)`**: Transactional batch editing across multiple files in a single turn.
+- **`create_file(file, content)`**: Creates a file with automatic parent directory creation, LSP synchronization, and diagnostics.
 
 ### Toolchain
 
-- **`build(dir, language, auto_fix, run_modernize)`**: The quality gate. Runs the language-appropriate Build -> Modernize -> Test -> Lint pipeline.
+- **`build(dir, language, auto_fix, run_modernize)`**: The quality gate. Runs the language-appropriate Build -> Modernize -> Test -> Lint pipeline with automatic LSP synchronization.
 - **`read_docs(import_path, symbol, language)`**: Fetch documentation for any package or symbol.
 - **`add_dependencies(packages, language)`**: Install packages and return their API documentation.
 - **`create_project(dir, language, dependencies)`**: Bootstrap a new project with idiomatic structure.
@@ -163,7 +164,8 @@ All tools use consistent argument names:
 
 - **`describe(file, line, col)`**: Returns type information and documentation for a symbol. Maps to `textDocument/hover`.
 - **`find_definition(file, line, col)`**: Jumps to a symbol's definition. Maps to `textDocument/definition`.
-- **`find_references(file, line, col)`**: Finds all references across the codebase. Maps to `textDocument/references`.
+- **`find_references(file, line, col)`**: Finds all references across the codebase. Categorizes results into [SOURCE] and [TESTS] with symbol context.
+- **`rename_symbol(file, line, col, new_name)`**: Performs a deterministic, project-wide rename via LSP.
 
 ### Testing
 

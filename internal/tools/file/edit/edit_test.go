@@ -2,6 +2,7 @@ package edit
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -20,6 +22,28 @@ type testServer struct {
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
 	return ts.reg.ForFile(path)
 }
+
+func (ts *testServer) RAG() *rag.Engine {
+	return nil
+}
+
+type noLSPBackend struct {
+	golang.Backend
+}
+
+func (b *noLSPBackend) LSPCommand() (string, []string, bool) {
+	return "", nil, false
+}
+
+func (b *noLSPBackend) Validate(ctx context.Context, file string) error {
+	content, _ := os.ReadFile(file)
+	if strings.Contains(string(content), "invalid syntax") {
+		return fmt.Errorf("mock syntax error at line 1")
+	}
+	return nil
+}
+
+func (b *noLSPBackend) Name() string { return "nolsp" }
 
 func TestEdit(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "edit-test-*")
@@ -107,20 +131,24 @@ func TestEdit_Broken(t *testing.T) {
 	roots.Global.Add(tmpDir)
 
 	reg := backend.NewRegistry()
-	reg.Register(golang.New())
+	reg.Register(&noLSPBackend{})
 
 	filePath := filepath.Join(tmpDir, "main.go")
 	if err := os.WriteFile(filePath, []byte("package main\n\nfunc main() {}"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Invalid Syntax
+	// Invalid Syntax - in v0.2.0, we don't block on syntax, but we report it.
 	res, _, _ := editHandler(context.TODO(), nil, Params{
 		File:       filePath,
 		OldContent: "func main() {}",
 		NewContent: "func main() { invalid syntax }",
 	}, &testServer{reg: reg})
-	if !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "edit produced invalid code") {
-		t.Errorf("expected error for invalid syntax, got: %s", res.Content[0].(*mcp.TextContent).Text)
+	if res.IsError {
+		t.Errorf("expected success despite invalid syntax, got error: %s", res.Content[0].(*mcp.TextContent).Text)
+	}
+	output := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(output, "WARNING") {
+		t.Errorf("expected syntax check warning, got: %s", output)
 	}
 }

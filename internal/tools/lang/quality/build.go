@@ -7,6 +7,7 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/roots"
+	"github.com/danicat/neko/internal/lsp"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -81,6 +82,21 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 	})
 	if err != nil {
 		return result(fmt.Sprintf("build pipeline error: %v", err), true), nil, nil
+	}
+
+	// LSP Sync if auto-fix was used
+	if autoFix {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
+				// We don't know exactly which files changed, so we trigger a generic workspace update
+				lspClient.DidChangeWatchedFiles(ctx, ".", 2) // 2: Changed
+				
+				// Pull diagnostics to include in the report
+				lspClient.PullDiagnostics(ctx)
+				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics())
+			}
+		}
 	}
 
 	return result(report.Output, report.IsError), nil, nil

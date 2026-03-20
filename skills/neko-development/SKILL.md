@@ -1,67 +1,50 @@
 ---
 name: neko-development
-description: Specialized workflows for language-aware development using Neko. Use when building, refactoring, or testing Go, Python, or JS/TS projects. Provides language-specific guidance for tools like build, query_tests, and modernize.
+description: Specialized workflows for language-aware development and refactoring using Neko. Use when performing structural changes, project-wide renames, or intent-based discovery. Provides guidance for semantic refactoring and full project health navigation.
 ---
 
 # Neko Development Skill
 
-This skill provides precise, language-aware workflows for using **Neko**. Neko's power lies in its deep integration with language toolchains (Go, Python, JS/TS).
+This skill provides precise, language-aware workflows for using **Neko** as a Semantic Operating System.
 
-## Core Development Workflow (All Languages)
+## Core Development Workflow (v0.2.0)
 
-1.  **Context**: Always call `open_project(dir=".")` first to initialize LSPs and backends.
-2.  **Explore**: Use `read_file(file="...", outline=true)` for AST-based structural summaries.
-3.  **Intel**: Use `describe`, `find_definition`, and `read_docs` for compiler-level symbol info.
-4.  **Edit**: Use `edit_file` with `start_line` and `end_line`. Neko validates syntax and applies formatting (gofmt/ruff) before saving.
-5.  **Verify**: Run `build()` to trigger the unified quality gate (Compile -> Modernize -> Test -> Lint).
+1.  **Context**: Call `open_project(dir=".")` to initialize the semantic engine.
+2.  **Explore**: Use `semantic_search` to find patterns by *meaning* when keywords aren't enough.
+3.  **Intel**: Use `read_file` and look for `<NEKO>` tags for immediate type signatures. Use `describe` for deep contextual analysis.
+4.  **Action**: 
+    - Use `rename_symbol` for all deterministic renames.
+    - Use `multi_edit` for interdependent changes across files.
+    - Use `edit_file` for surgical logic updates.
+5.  **Navigate**: Use the **Full Disclosure** diagnostic report returned by modification tools as your todo list for the next turn.
+6.  **Verify**: Run `build()` for final validation.
 
 ---
 
 ## 🐹 Go Development (Golang)
 
-Go projects use standard toolchains (`go` command) and advanced SQL-based test analysis.
+Go projects use standard toolchains and the high-fidelity `gopls` LSP.
 
-### Toolchain Nuances
-- **Build**: Runs `go build`, `go mod tidy`, and `gofmt`.
-- **Testing**: Uses `go test -v -cover`. Neko parses coverage at the package level.
-- **Modernize**: Analyzes code for outdated patterns (e.g., pre-Go 1.18 generics or old `io/ioutil` usage).
-
-### Advanced Go Analysis
-- **Test Querying (`query_tests`)**: **Go-Specific**. Allows querying `go test` results and coverage data using SQL.
-  - *Example*: `SELECT package, coverage FROM all_coverage WHERE coverage < 50`
-- **Mutation Testing**: Uses `go-mutesting` to find "survivors" (code changes that tests don't catch).
+### Refactoring Nuances
+- **Rename**: `rename_symbol` is the authoritative way to refactor Go symbols project-wide.
+- **Build**: Auto-fix triggers a `workspace/didChangeWatchedFiles` sync.
+- **Test Querying (`query_tests`)**: **Go-Specific**. Query `go test` results using SQL.
 
 ---
 
 ## 🐍 Python Development
 
-Python projects **must** use `uv` for all operations. Neko enforces this to ensure deterministic environments.
+Python projects **must** use `uv` for all operations.
 
-### Toolchain Nuances
-- **Environment**: All commands run via `uv run`. If `uv` is missing, the backend will fail.
-- **Lint/Format**: Uses `ruff` for extremely fast linting and formatting.
-- **Type Checking**: Runs `mypy` automatically during `build()`.
-- **Testing**: Uses `pytest`. Neko captures `passed`/`failed` summaries from the pytest output.
-- **Modernize**: Uses `ruff` with `pyupgrade` rules (`UP` category) to refactor code for newer Python versions.
-
-### ⚠️ Python Limitations
-- **Test Querying**: SQL querying via `query_tests` is **not supported** for Python. Test data is collected via pytest JSON reports but is not searchable via SQL.
-
----
-
-## 📜 JavaScript / TypeScript Development
-
-Neko supports JS/TS primarily through a plugin system.
-
-### Toolchain Nuances
-- **Package Manager**: Detects `npm`, `yarn`, or `pnpm` automatically based on lockfiles.
-- **Modernize**: If configured, uses `eslint` or `prettier` for code standards.
-- **Testing**: Typically uses `jest` or `vitest`.
+### Refactoring Nuances
+- **Rename**: Supported via `rename_symbol` (requires `pylsp` or `pyright`).
+- **Lint/Format**: Automated via `ruff` during `edit_file` saves.
+- **Modernize**: Uses `ruff` with `pyupgrade` rules.
 
 ---
 
 ## Pro-Tips for Agents
 
-- **Token Efficiency**: Always prefer `outline: true` in `read_file` for initial exploration.
-- **Safety Gate**: If `edit_file` reports a syntax error, do not attempt to force the write. Fix the syntax in the `new_content` block and retry.
-- **On-Touch Activation**: Neko backends activate "on-touch." Reading a `.go` file in a generic project will automatically spin up the Go backend and LSP.
+- **Semantic Momentum**: Use the diagnostic list returned by every edit to steer your next action. Do not wait for a full `build` if the LSP already shows regressions.
+- **Type Awareness**: Trust the `<NEKO>` tags in `read_file`. They are the compiler's view of the type system.
+- **Atomic Batches**: Submit "Complete Thoughts" using `multi_edit` to keep the diagnostic list actionable.

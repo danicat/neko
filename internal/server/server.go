@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/config"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/instructions"
 	"github.com/danicat/neko/internal/lsp"
@@ -26,6 +29,8 @@ import (
 	"github.com/danicat/neko/internal/tools/lang/project"
 	"github.com/danicat/neko/internal/tools/lang/quality"
 	"github.com/danicat/neko/internal/tools/lang/references"
+	"github.com/danicat/neko/internal/tools/lang/rename"
+	"github.com/danicat/neko/internal/tools/lang/search"
 	describe "github.com/danicat/neko/internal/tools/lang/symbolinfo"
 	"github.com/danicat/neko/internal/tools/lang/testquery"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -42,6 +47,7 @@ type Server struct {
 	mu             sync.Mutex
 	projectOpen    bool
 	projectRoot    string
+	ragEngine      *rag.Engine
 	activeBackends map[string]backend.LanguageBackend // keyed by Name()
 	seenDocs       map[string]map[string]bool
 }
@@ -127,7 +133,7 @@ func (s *Server) RegisterHandlers() error {
 func (s *Server) registerHandlersLocked() error {
 	if !s.projectOpen {
 		// Lobby Phase
-		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code")
+		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code", "semantic_search", "multi_edit", "rename_symbol")
 
 		mcp.AddTool(s.mcpServer, &mcp.Tool{
 			Name:        "open_project",
@@ -161,7 +167,11 @@ func (s *Server) registerHandlersLocked() error {
 		// Agnostic tools
 		read.Register(s.mcpServer, s)
 		edit.Register(s.mcpServer, s)
+		edit.MultiRegister(s.mcpServer, s)
 		list.Register(s.mcpServer, s)
+		if s.ragEngine != nil {
+			search.Register(s.mcpServer, s)
+		}
 		create.Register(s.mcpServer, s)
 		codereview.Register(s.mcpServer, s, s.cfg.DefaultModel)
 
@@ -192,6 +202,7 @@ func (s *Server) registerHandlersLocked() error {
 			describe.Register(s.mcpServer, s)
 			definition.Register(s.mcpServer, s)
 			references.Register(s.mcpServer, s)
+			rename.Register(s.mcpServer, s)
 		}
 	}
 
@@ -201,6 +212,11 @@ func (s *Server) registerHandlersLocked() error {
 // Registry returns the backend registry for external access.
 func (s *Server) Registry() *backend.Registry {
 	return s.registry
+}
+
+// RAG returns the semantic search engine.
+func (s *Server) RAG() *rag.Engine {
+	return s.ragEngine
 }
 
 // ShouldShowDoc returns true if the documentation for the given package in the given language has not been shown yet.
@@ -268,6 +284,16 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 		s.activeBackends[be.Name()] = be
 	}
 
+	// Initialize RAG
+	engine, err := rag.NewEngine(ctx, absRoot)
+	if err == nil {
+		s.ragEngine = engine
+		// Initial crawl (async but synchronous for the purpose of the engine initialization)
+		go s.crawlProject(context.Background(), absRoot)
+	} else {
+		log.Printf("WARN: Disabling semantic_search tool: %v", err)
+	}
+
 	// Eager LSP initialization
 	for _, be := range backends {
 		s.startLSP(ctx, be, absRoot)
@@ -287,6 +313,44 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 		sb.WriteString("No specific language backends detected. General file tools are enabled.")
 	}
 	return sb.String()
+}
+
+func (s *Server) crawlProject(ctx context.Context, root string) {
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		// Basic skip logic (should use SkipDirs from backends)
+		if strings.Contains(path, ".git") || strings.Contains(path, "node_modules") {
+			return nil
+		}
+
+		// Only ingest known source files
+		be := s.registry.ForFile(path)
+		if be == nil {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+
+		var symbols []lsp.DocumentSymbol
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), root, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
+				symbols, _ = client.DocumentSymbol(ctx, path)
+			}
+		}
+
+		imports, _ := be.ParseImports(ctx, path)
+		s.ragEngine.IngestFile(ctx, path, string(content), symbols, imports)
+		return nil
+	})
+	if err != nil {
+		log.Printf("RAG crawl failed: %v", err)
+	}
 }
 
 func (s *Server) startLSP(ctx context.Context, be backend.LanguageBackend, absRoot string) {

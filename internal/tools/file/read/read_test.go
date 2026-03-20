@@ -9,6 +9,7 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -20,6 +21,10 @@ type testServer struct {
 
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
 	return ts.reg.ForFile(path)
+}
+
+func (ts *testServer) RAG() *rag.Engine {
+	return nil
 }
 
 func (ts *testServer) ShouldShowDoc(lang, pkg string) bool {

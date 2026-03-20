@@ -42,9 +42,16 @@ var Registry = map[string]ToolDef{
 		Name:        "edit_file",
 		Title:       "Edit File",
 		Description: "An intelligent file editor providing robust block matching and safety guarantees. Automatically handles formatting, import optimization, and syntax verification to ensure edits do not break the code.",
-		Instruction: "*   **`edit_file`**: The primary tool for safe code modification.\n    *   **Capabilities:** Validates syntax and auto-formats (gofmt/goimports for Go, ruff for Python) *before* committing changes to disk.\n    *   **Robustness:** Uses fuzzy matching to locate target blocks despite minor whitespace or indentation variances.\n    *   **Usage:** `edit_file(file=\"...\", old_content=\"...\", new_content=\"...\")`.\n    *   **Append Mode:** Leave `old_content` empty to append to the end of the file.\n    *   **Outcome:** A syntactically valid, properly formatted file update.",
+		Instruction: "*   **`edit_file`**: The primary tool for safe code modification.\n    *   **Capabilities:** Validates syntax and auto-formats (gofmt/goimports for Go, ruff for Python) *before* committing changes to disk.\n    *   **Robustness:** Uses fuzzy matching to locate target blocks despite minor whitespace or indentation variances.\n    *   **Usage:** `edit_file(file=\"...\", old_content=\"...\", new_content=\"...\")`.\n    *   **Outcome:** A syntactically valid, properly formatted file update.",
+	},
+	"multi_edit": {
+		Name:        "multi_edit",
+		Title:       "Multi-File Edit",
+		Description: "Applies multiple file edits in a single turn. Ensures project-wide semantic integrity by providing a unified diagnostic report after all changes are applied.",
+		Instruction: "*   **`multi_edit`**: Apply multiple file changes in a single Turn.\n    *   **Usage:** `multi_edit(edits=[{\"file\": \"...\", \"old_content\": \"...\", \"new_content\": \"...\"}, ...])`\n    *   **Outcome:** Multiple files are updated, followed by a full project diagnostic list.",
 	},
 	"read_file": {
+
 		Name:        "read_file",
 		Title:       "Read File",
 		Description: "A structure-aware file reader that optimizes for context density. Supports returning full content, structural outlines (AST-based signatures), or specific line ranges to minimize token consumption.",
@@ -56,7 +63,12 @@ var Registry = map[string]ToolDef{
 		Description: "Recursively lists files and directories while filtering out build artifacts and version control data. Provides an accurate view of the source code hierarchy.",
 		Instruction: "*   **`list_files`**: Explore the project structure.\n    *   **Usage:** `list_files(dir=\".\", depth=2)`\n    *   **Outcome:** A hierarchical list of source files and directories.",
 	},
-
+	"semantic_search": {
+		Name:        "semantic_search",
+		Title:       "Semantic Search",
+		Description: "Finds relevant code snippets based on a natural language query using a local vector database. Useful for high-level pattern discovery and understanding intent.",
+		Instruction: "*   **`semantic_search`**: Find code by meaning.\n    *   **Usage:** `semantic_search(query=\"how is lsp lifecycle handled?\")`\n    *   **Outcome:** A ranked list of semantically similar code chunks with metadata.",
+	},
 	// --- DOCS ---
 	"read_docs": {
 		Name:        "read_docs",
@@ -112,7 +124,12 @@ var Registry = map[string]ToolDef{
 		Description: "Finds all references to a symbol at a given position across the codebase. Uses the Language Server Protocol for precise cross-file analysis.",
 		Instruction: "*   **`find_references`**: Find all usages of a symbol.\n    *   **Usage:** `find_references(file=\"main.go\", line=10, col=5)`\n    *   **Outcome:** List of file locations where the symbol is referenced.",
 	},
-
+	"rename_symbol": {
+		Name:        "rename_symbol",
+		Title:       "Rename Symbol",
+		Description: "Performs a deterministic, project-wide rename of a symbol using the Language Server Protocol. Ensures all references and imports are updated atomically.",
+		Instruction: "*   **`rename_symbol`**: Perform a project-wide rename.\n    *   **Usage:** `rename_symbol(file=\"main.go\", line=10, col=5, new_name=\"NewName\")`\n    *   **Outcome:** All references are updated, followed by a project health report.",
+	},
 	// --- AGENTS ---
 	"review_code": {
 		Name:        "review_code",

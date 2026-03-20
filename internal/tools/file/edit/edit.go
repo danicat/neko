@@ -5,12 +5,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
+	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/core/shared"
 	"github.com/danicat/neko/internal/core/textdist"
+	"github.com/danicat/neko/internal/lsp"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -18,6 +21,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	RAG() *rag.Engine
 }
 
 // Register registers the edit_file tool with the server.
@@ -32,6 +36,18 @@ func Register(mcpServer *mcp.Server, s Server) {
 	})
 }
 
+// MultiRegister registers the multi_edit tool with the server.
+func MultiRegister(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["multi_edit"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        def.Name,
+		Title:       def.Title,
+		Description: def.Description,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args MultiParams) (*mcp.CallToolResult, any, error) {
+		return multiEditHandler(ctx, req, args, s)
+	})
+}
+
 // Params defines the input parameters for the edit_file tool.
 type Params struct {
 	File       string  `json:"file" jsonschema:"The path to the file to edit"`
@@ -43,26 +59,122 @@ type Params struct {
 	Append     bool    `json:"append,omitempty" jsonschema:"If true, append new_content to the end of the file (ignores old_content)"`
 }
 
+// MultiParams defines the input parameters for the multi_edit tool.
+type MultiParams struct {
+	Edits []Params `json:"edits" jsonschema:"List of files and their proposed edits"`
+}
+
+// MatchResult represents a potential match in the file.
+type MatchResult struct {
+	Start int
+	End   int
+	Score float64
+}
+
 func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.File)
+	_, resSb, err := performEdit(ctx, args, s)
 	if err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
+
+	// For single edit, we pull diags immediately
+	be := s.ForFile(ctx, args.File)
+	var lspClient *lsp.Client
+	if be != nil {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
+		}
+	}
+
+	if lspClient != nil {
+		lspClient.WaitForDiagnostics(ctx, args.File)
+		allDiags := lspClient.GetAllDiagnostics()
+		resSb.WriteString(lsp.FormatDiagnostics(allDiags))
+		lspClient.DidClose(ctx, args.File)
+	} else {
+		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
+	}, nil, nil
+}
+
+func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiParams, s Server) (*mcp.CallToolResult, any, error) {
+	if len(args.Edits) == 0 {
+		return errorResult("no edits provided"), nil, nil
+	}
+
+	var resSb strings.Builder
+	resSb.WriteString("### 批量编辑报告 (Multi-Edit Report)\n")
+
+	affectedBackends := make(map[string]backend.LanguageBackend)
+
+	for i, edit := range args.Edits {
+		resSb.WriteString(fmt.Sprintf("\n#### %d. %s\n", i+1, edit.File))
+		_, editSb, err := performEdit(ctx, edit, s)
+		if err != nil {
+			resSb.WriteString(fmt.Sprintf("❌ FAILED: %v\n", err))
+			continue
+		}
+		resSb.WriteString(editSb.String())
+
+		if be := s.ForFile(ctx, edit.File); be != nil {
+			affectedBackends[be.Name()] = be
+		}
+	}
+
+	// One global diagnostic pull at the end
+	resSb.WriteString("\n---\n")
+	anyLSP := false
+	for _, be := range affectedBackends {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
+				anyLSP = true
+				// We don't have a specific file to wait for, so we just pull current state
+				lspClient.PullDiagnostics(ctx)
+				resSb.WriteString(lsp.FormatDiagnostics(lspClient.GetAllDiagnostics()))
+
+				// Close all documents in this backend
+				for _, edit := range args.Edits {
+					if be2 := s.ForFile(ctx, edit.File); be2 != nil && be2.Name() == be.Name() {
+						lspClient.DidClose(ctx, edit.File)
+					}
+				}
+			}
+		}
+	}
+
+	if !anyLSP {
+		resSb.WriteString("\n*Note: No LSP active for affected files. Global semantic verification skipped.*")
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
+	}, nil, nil
+}
+
+func performEdit(ctx context.Context, args Params, s Server) (string, *strings.Builder, error) {
+	var resSb strings.Builder
+	absPath, err := roots.Global.Validate(args.File)
+	if err != nil {
+		return "", nil, err
+	}
 	args.File = absPath
+
+	// Strip NEKO tags from input
+	args.OldContent = shared.StripNekoTags(args.OldContent)
+	args.NewContent = shared.StripNekoTags(args.NewContent)
 
 	if args.Threshold == 0 {
 		args.Threshold = 0.95
 	}
-	if args.Threshold > 1.0 {
-		args.Threshold = 1.0
-	}
-	if args.Threshold < 0.0 {
-		args.Threshold = 0.0
-	}
 
 	content, err := os.ReadFile(args.File)
 	if err != nil {
-		return errorResult(fmt.Sprintf("failed to read file: %v", err)), nil, nil
+		return "", nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	var newContent string
@@ -73,7 +185,7 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	if args.StartLine > 0 || args.EndLine > 0 {
 		s, e, err := shared.GetLineOffsets(original, args.StartLine, args.EndLine)
 		if err != nil {
-			return errorResult(fmt.Sprintf("line range error: %v", err)), nil, nil
+			return "", nil, err
 		}
 		searchStart = s
 		searchEnd = e
@@ -87,78 +199,99 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		}
 	} else {
 		searchArea := original[searchStart:searchEnd]
-		matchStart, matchEnd, score := findBestMatch(searchArea, args.OldContent)
+		matches := findMatches(searchArea, args.OldContent)
 
-		if score < args.Threshold {
-			bestMatch := ""
-			if matchStart < matchEnd && matchEnd <= len(searchArea) {
-				bestMatch = searchArea[matchStart:matchEnd]
-			}
-			globalMatchStart := searchStart + matchStart
-			globalMatchEnd := searchStart + matchEnd
-			bestStartLine := shared.GetLineFromOffset(original, globalMatchStart)
-			bestEndLine := shared.GetLineFromOffset(original, globalMatchEnd)
-
-			return errorResult(fmt.Sprintf("match not found with sufficient confidence (score: %.2f < %.2f).\n\nBest Match Found (Lines %d-%d):\n```\n%s\n```\n\nSuggestions: verify your old_content or lower threshold.", score, args.Threshold, bestStartLine, bestEndLine, bestMatch)), nil, nil
+		var bestMatch MatchResult
+		if len(matches) > 0 {
+			bestMatch = matches[0]
 		}
 
-		matchStart += searchStart
-		matchEnd += searchStart
+		if bestMatch.Score < args.Threshold {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("match not found with sufficient confidence (best score: %.2f < %.2f).\n\n", bestMatch.Score, args.Threshold))
+			if len(matches) > 0 {
+				sb.WriteString("Top Suggestions:\n")
+				for i, m := range matches {
+					if i >= 3 {
+						break
+					}
+					matchText := searchArea[m.Start:m.End]
+					globalStart := searchStart + m.Start
+					globalEnd := searchStart + m.End
+					startLine := shared.GetLineFromOffset(original, globalStart)
+					endLine := shared.GetLineFromOffset(original, globalEnd)
+					sb.WriteString(fmt.Sprintf("%d. (Score: %.2f) Lines %d-%d:\n```\n%s\n```\n", i+1, m.Score, startLine, endLine, matchText))
+				}
+			}
+			sb.WriteString("\nSuggestions: verify your old_content or lower threshold.")
+			return "", nil, fmt.Errorf("%s", sb.String())
+		}
+
+		matchStart := bestMatch.Start + searchStart
+		matchEnd := bestMatch.End + searchStart
 		newContent = original[:matchStart] + args.NewContent + original[matchEnd:]
 	}
 
-	// Validate & Format using the appropriate backend
 	be := s.ForFile(ctx, args.File)
-	var warning string
+	var lspClient *lsp.Client
 	if be != nil {
-
-		//nolint:gosec // G306
-		if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
-			return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
-		}
-
-		if err := be.Validate(ctx, args.File); err != nil {
-			if restoreErr := os.WriteFile(args.File, content, 0644); restoreErr != nil {
-				return errorResult(fmt.Sprintf("edit produced invalid code AND failed to restore original: %v (restore: %v)", err, restoreErr)), nil, nil
-			}
-			snippet := shared.ExtractErrorSnippet(newContent, err)
-			return errorResult(fmt.Sprintf("edit produced invalid code: %v\n\nContext:\n```\n%s\n```\nHint: Ensure your new_content is syntactically valid in context.", err, snippet)), nil, nil
-		}
-
-		if fmtErr := be.Format(ctx, args.File); fmtErr != nil {
-			warning = fmt.Sprintf("\n\n**WARNING:** formatting failed: %v", fmtErr)
-		}
-
-		formatted, err := os.ReadFile(args.File)
-		if err == nil {
-			newContent = string(formatted)
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot, _ := roots.Global.Validate(".")
+			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 		}
 	}
 
+	if lspClient != nil {
+		lspClient.DidOpen(ctx, args.File, original)
+		lspClient.DidChange(ctx, args.File, newContent)
+
+		if edits, err := lspClient.OrganizeImports(ctx, args.File); err == nil && len(edits) > 0 {
+			newContent = lsp.ApplyTextEdits(newContent, edits)
+			lspClient.DidChange(ctx, args.File, newContent)
+		}
+		if edits, err := lspClient.Format(ctx, args.File); err == nil && len(edits) > 0 {
+			newContent = lsp.ApplyTextEdits(newContent, edits)
+			lspClient.DidChange(ctx, args.File, newContent)
+		}
+	}
+
+	// Direct Write
 	//nolint:gosec // G306
 	if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
-		return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
+		return "", nil, fmt.Errorf("failed to write file: %w", err)
 	}
 
-	if be != nil {
-		if err := be.Validate(ctx, args.File); err != nil {
-			warning += fmt.Sprintf("\n\n**WARNING:** Post-edit syntax check failed: %v", err)
+	resSb.WriteString(fmt.Sprintf("✅ Successfully edited %s\n", args.File))
+
+	// Synchronous RAG Re-indexing
+	if engine := s.RAG(); engine != nil {
+		var symbols []lsp.DocumentSymbol
+		if lspClient != nil {
+			symbols, _ = lspClient.DocumentSymbol(ctx, args.File)
 		}
-	} else {
-		warning += "\n\n**Note:** Syntax validation and formatting skipped for this file type."
+		var imports []string
+		if be != nil {
+			imports, _ = be.ParseImports(ctx, args.File)
+		}
+		engine.IngestFile(ctx, args.File, newContent, symbols, imports)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully edited %s%s", args.File, warning)},
-		},
-	}, nil, nil
+	if lspClient != nil {
+		lspClient.DidSave(ctx, args.File, newContent)
+	} else if be != nil {
+		// Manual validation fallback for non-LSP backends or when LSP is down
+		if err := be.Validate(ctx, args.File); err != nil {
+			snippet := shared.ExtractErrorSnippet(newContent, err)
+			resSb.WriteString(fmt.Sprintf("\n**WARNING:** Post-edit syntax check failed: %v\n\nContext:\n```\n%s\n```\n", err, snippet))
+		}
+	}
+	return newContent, &resSb, nil
 }
 
-func findBestMatch(content, search string) (int, int, float64) {
+func findMatches(content, search string) []MatchResult {
 	normSearch := normalize(search)
 	if normSearch == "" {
-		return 0, 0, 0
+		return nil
 	}
 
 	type charMap struct {
@@ -181,7 +314,7 @@ func findBestMatch(content, search string) (int, int, float64) {
 		runeIdx := len([]rune(before))
 		start := mapped[runeIdx].offset
 		end := mapped[runeIdx+len([]rune(normSearch))-1].offset + 1
-		return start, end, 1.0
+		return []MatchResult{{Start: start, End: end, Score: 1.0}}
 	}
 
 	searchRunes := []rune(normSearch)
@@ -190,7 +323,7 @@ func findBestMatch(content, search string) (int, int, float64) {
 
 	if searchLen > contentLen {
 		score := similarity(normSearch, normContent)
-		return 0, len(content), score
+		return []MatchResult{{Start: 0, End: len(content), Score: score}}
 	}
 
 	seedLen := 16
@@ -232,28 +365,44 @@ func findBestMatch(content, search string) (int, int, float64) {
 		}
 	}
 
-	bestScore := 0.0
-	bestStartIdx := 0
-	bestEndIdx := 0
-
+	var results []MatchResult
 	for startIdx := range candidates {
 		endIdx := min(startIdx+searchLen, len(normContentRunes))
 		window := string(normContentRunes[startIdx:endIdx])
 		score := similarity(normSearch, window)
-		if score > bestScore {
-			bestScore = score
-			bestStartIdx = startIdx
-			bestEndIdx = endIdx
+		if score > 0.1 {
+			start := mapped[startIdx].offset
+			end := mapped[endIdx-1].offset + 1
+			results = append(results, MatchResult{Start: start, End: end, Score: score})
 		}
 	}
 
-	if bestScore > 0 {
-		start := mapped[bestStartIdx].offset
-		end := mapped[bestEndIdx-1].offset + 1
-		return start, end, bestScore
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		return results[i].Start < results[j].Start
+	})
+
+	var filtered []MatchResult
+	for _, r := range results {
+		tooClose := false
+		for _, f := range filtered {
+			diff := r.Start - f.Start
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff < 10 {
+				tooClose = true
+				break
+			}
+		}
+		if !tooClose {
+			filtered = append(filtered, r)
+		}
 	}
 
-	return 0, 0, 0
+	return filtered
 }
 
 func isWhitespace(r rune) bool {
