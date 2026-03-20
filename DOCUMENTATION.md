@@ -1,4 +1,4 @@
-# Neko Documentation (v0.1.0)
+# Neko Documentation
 
 Neko is an intelligent, language-aware development Model Context Protocol (MCP) server. It provides a standardized set of tools for code exploration, editing, building, and analysis across multiple programming languages.
 
@@ -38,7 +38,7 @@ cd neko
 ```bash
 make build
 ```
-This creates the `neko` executable in the `bin/` directory.
+This creates the `neko` executable in the project root.
 
 ### 3. Configure your MCP client
 Add Neko to your MCP configuration (e.g., in Claude Desktop or Gemini CLI):
@@ -47,8 +47,8 @@ Add Neko to your MCP configuration (e.g., in Claude Desktop or Gemini CLI):
 {
   "mcpServers": {
     "neko": {
-      "command": "/path/to/neko/bin/neko",
-      "args": ["--plugin-dir", "/path/to/neko/plugins"]
+      "command": "/path/to/neko/neko",
+      "args": ["-plugins", "/path/to/neko/plugins"]
     }
   }
 }
