@@ -183,7 +183,6 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		line int
 		col  int
 	}
-	re := identRe
 	// Keywords to skip
 	keywords := map[string]bool{
 		"func": true, "var": true, "type": true, "struct": true, "interface": true,
@@ -204,7 +203,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		fmt.Fprintf(&contentWithLines, "%4d | %s\n", lineNum, line)
 
 		if lspClient != nil {
-			matches := re.FindAllStringIndex(line, -1)
+			matches := identRe.FindAllStringIndex(line, -1)
 			for _, m := range matches {
 				name := line[m[0]:m[1]]
 				if !keywords[name] {

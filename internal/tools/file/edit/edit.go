@@ -380,12 +380,14 @@ func findMatches(content, search string) []MatchResult {
 			if idx == -1 {
 				break
 			}
-			realIdx := startSearch + idx
-			projectedStart := realIdx - offset
+			byteIdx := startSearch + idx
+			// Convert byte offset to rune offset
+			runeIdx := len([]rune(normContent[:byteIdx]))
+			projectedStart := runeIdx - offset
 			if projectedStart >= 0 && projectedStart <= len(normContentRunes)-searchLen {
 				candidates[projectedStart]++
 			}
-			startSearch = realIdx + 1
+			startSearch = byteIdx + len(seed)
 		}
 	}
 

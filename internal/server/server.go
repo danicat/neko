@@ -301,6 +301,12 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 		s.activeBackends[be.Name()] = be
 	}
 
+	// Cancel any previous crawl before starting a new one
+	if s.crawlCancel != nil {
+		s.crawlCancel()
+		s.crawlCancel = nil
+	}
+
 	// Initialize RAG
 	engine, err := rag.NewEngine(ctx, absRoot)
 	if err == nil {
@@ -483,6 +489,7 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 	}
 	s.projectOpen = false
 	s.projectRoot = ""
+	s.ragEngine = nil
 	s.activeBackends = make(map[string]backend.LanguageBackend)
 	s.seenDocs = make(map[string]map[string]bool)
 	s.seenTypeInfo = make(map[string]bool)

@@ -984,7 +984,7 @@ func (c *Client) readLoop() {
 			if ch != nil {
 				var resp jsonrpcResponse
 				if err := json.Unmarshal(msg, &resp); err != nil {
-					continue
+					resp.Error = &jsonrpcError{Code: -32700, Message: fmt.Sprintf("failed to parse response: %v", err)}
 				}
 				ch <- &resp
 			}
