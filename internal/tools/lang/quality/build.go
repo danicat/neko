@@ -4,6 +4,7 @@ package quality
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/roots"
@@ -16,6 +17,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ResolveBackend(language string) (backend.LanguageBackend, error)
+	ProjectRoot() string
 }
 
 // Register registers the build tool with the server.
@@ -42,12 +44,21 @@ type Params struct {
 }
 
 func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	dir := args.Dir
-	if dir == "" {
-		dir = "."
+	var absDir string
+	if args.Dir == "" || args.Dir == "." {
+		absDir = s.ProjectRoot()
+		if absDir == "" {
+			absDir, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absDir, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return result(err.Error(), true), nil, nil
+		}
 	}
-	absDir, err := roots.Global.Validate(dir)
-	if err != nil {
+
+	if err := roots.Global.Validate(absDir); err != nil {
 		return result(err.Error(), true), nil, nil
 	}
 
@@ -87,14 +98,20 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 	// LSP Sync if auto-fix was used
 	if autoFix {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				// We don't know exactly which files changed, so we trigger a generic workspace update
 				lspClient.DidChangeWatchedFiles(ctx, ".", 2) // 2: Changed
 
 				// Pull diagnostics to include in the report
 				lspClient.PullDiagnostics(ctx)
-				workspaceRoot, _ := roots.Global.Validate(".")
+				workspaceRoot := s.ProjectRoot()
+				if workspaceRoot == "" {
+					workspaceRoot, _ = filepath.Abs(".")
+				}
 				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot)
 			}
 		}

@@ -83,46 +83,37 @@ func (s *State) Sync(ctx context.Context, session *mcp.ServerSession) {
 }
 
 // Validate checks if the given path is within any of the registered roots.
-func (s *State) Validate(path string) (string, error) {
-	if path == "" || path == "." {
-		roots := s.Get()
-		if len(roots) > 0 {
-			return roots[0], nil
-		}
-		abs, _ := filepath.Abs(".")
-		return abs, nil
-	}
-
+func (s *State) Validate(path string) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
+		return fmt.Errorf("invalid path: %w", err)
 	}
 
 	roots := s.Get()
 
 	rawTemp := os.TempDir()
 	if strings.HasPrefix(absPath, rawTemp) {
-		return absPath, nil
+		return nil
 	}
 	if tempDir, err := filepath.EvalSymlinks(rawTemp); err == nil {
 		if strings.HasPrefix(absPath, tempDir) || strings.HasPrefix(absPath, "/tmp") {
-			return absPath, nil
+			return nil
 		}
 	}
 
 	if len(roots) == 0 {
 		cwd, _ := filepath.Abs(".")
 		if absPath == cwd || strings.HasPrefix(absPath, cwd+string(filepath.Separator)) {
-			return absPath, nil
+			return nil
 		}
-		return "", fmt.Errorf("access denied: path %s is outside the current working directory", path)
+		return fmt.Errorf("access denied: path %s is outside the current working directory", path)
 	}
 
 	for _, root := range roots {
 		if absPath == root || strings.HasPrefix(absPath, root+string(filepath.Separator)) {
-			return absPath, nil
+			return nil
 		}
 	}
 
-	return "", fmt.Errorf("access denied: path %s is outside of registered workspace roots", path)
+	return fmt.Errorf("access denied: path %s is outside of registered workspace roots", path)
 }

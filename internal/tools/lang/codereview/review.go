@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
+	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/genai"
@@ -27,6 +29,7 @@ var (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	ProjectRoot() string
 }
 
 // Register registers the review_code tool with the server.
@@ -165,12 +168,30 @@ func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params,
 
 	content := args.FileContent
 	if args.File != "" {
-		data, err := os.ReadFile(args.File)
+		absPath, err := filepath.Abs(args.File)
 		if err != nil {
 			return &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{
-					&mcp.TextContent{Text: fmt.Sprintf("failed to read file %s: %v", args.File, err)},
+					&mcp.TextContent{Text: fmt.Sprintf("invalid path: %v", err)},
+				},
+			}, nil, nil
+		}
+		if err := roots.Global.Validate(absPath); err != nil {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: err.Error()},
+				},
+			}, nil, nil
+		}
+
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("failed to read file %s: %v", absPath, err)},
 				},
 			}, nil, nil
 		}

@@ -33,6 +33,12 @@ type WorkspaceEdit struct {
 	DocumentChanges []json.RawMessage     `json:"documentChanges,omitempty"`
 }
 
+// TextDocumentEdit represents edits to a single text document.
+type TextDocumentEdit struct {
+	TextDocument VersionedTextDocumentIdentifier `json:"textDocument"`
+	Edits        []TextEdit                      `json:"edits"`
+}
+
 // TextDocumentIdentifier identifies a text document by its URI.
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`

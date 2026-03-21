@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -18,10 +19,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	RAG() *rag.Engine
+	ProjectRoot() string
 }
 
 // Register registers the edit_file tool with the server.
@@ -82,7 +83,10 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	var lspClient *lsp.Client
 	if be != nil {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 		}
 	}
@@ -90,7 +94,10 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	if lspClient != nil {
 		lspClient.WaitForDiagnostics(ctx, args.File)
 		allDiags := lspClient.GetAllDiagnostics()
-		workspaceRoot, _ := roots.Global.Validate(".")
+		workspaceRoot := s.ProjectRoot()
+		if workspaceRoot == "" {
+			workspaceRoot, _ = filepath.Abs(".")
+		}
 		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 		lspClient.DidClose(ctx, args.File)
 	} else {
@@ -131,12 +138,18 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 	anyLSP := false
 	for _, be := range affectedBackends {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				anyLSP = true
 				// We don't have a specific file to wait for, so we just pull current state
 				lspClient.PullDiagnostics(ctx)
-				workspaceRoot, _ := roots.Global.Validate(".")
+				workspaceRoot := s.ProjectRoot()
+				if workspaceRoot == "" {
+					workspaceRoot, _ = filepath.Abs(".")
+				}
 				resSb.WriteString(lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot))
 
 				// Close all documents in this backend
@@ -160,8 +173,21 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 
 func performEdit(ctx context.Context, args Params, s Server) (string, *strings.Builder, error) {
 	var resSb strings.Builder
-	absPath, err := roots.Global.Validate(args.File)
-	if err != nil {
+	var absPath string
+	if args.File == "" || args.File == "." {
+		absPath = s.ProjectRoot()
+		if absPath == "" {
+			absPath, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absPath, err = filepath.Abs(args.File)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
+	if err := roots.Global.Validate(absPath); err != nil {
 		return "", nil, err
 	}
 	args.File = absPath
@@ -237,7 +263,10 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 	var lspClient *lsp.Client
 	if be != nil {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 		}
 	}
@@ -313,8 +342,12 @@ func findMatches(content, search string) []MatchResult {
 
 	if before, _, ok := strings.Cut(normContent, normSearch); ok {
 		runeIdx := len([]rune(before))
+		lastIdx := runeIdx + len([]rune(normSearch)) - 1
+		if runeIdx >= len(mapped) || lastIdx >= len(mapped) {
+			return nil
+		}
 		start := mapped[runeIdx].offset
-		end := mapped[runeIdx+len([]rune(normSearch))-1].offset + 1
+		end := mapped[lastIdx].offset + len(string(mapped[lastIdx].char))
 		return []MatchResult{{Start: start, End: end, Score: 1.0}}
 	}
 
@@ -368,12 +401,19 @@ func findMatches(content, search string) []MatchResult {
 
 	var results []MatchResult
 	for startIdx := range candidates {
+		if startIdx >= len(mapped) {
+			continue
+		}
 		endIdx := min(startIdx+searchLen, len(normContentRunes))
+		if endIdx <= 0 || endIdx > len(mapped) {
+			continue
+		}
 		window := string(normContentRunes[startIdx:endIdx])
 		score := similarity(normSearch, window)
 		if score > 0.1 {
 			start := mapped[startIdx].offset
-			end := mapped[endIdx-1].offset + 1
+			lastMapped := mapped[endIdx-1]
+			end := lastMapped.offset + len(string(lastMapped.char))
 			results = append(results, MatchResult{Start: start, End: end, Score: score})
 		}
 	}

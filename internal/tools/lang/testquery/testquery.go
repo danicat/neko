@@ -17,6 +17,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ResolveBackend(language string) (backend.LanguageBackend, error)
+	ProjectRoot() string
 }
 
 // Register registers the query_tests tool with the server.
@@ -45,12 +46,21 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		return errorResult("query is required"), nil, nil
 	}
 
-	dir := args.Dir
-	if dir == "" {
-		dir = "."
+	var absDir string
+	if args.Dir == "" || args.Dir == "." {
+		absDir = s.ProjectRoot()
+		if absDir == "" {
+			absDir, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absDir, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
 	}
-	absDir, err := roots.Global.Validate(dir)
-	if err != nil {
+
+	if err := roots.Global.Validate(absDir); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 

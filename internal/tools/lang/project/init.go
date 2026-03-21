@@ -4,6 +4,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
@@ -41,8 +42,11 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 		args.ModulePath = args.Dir
 	}
 
-	absPath, err := roots.Global.Validate(args.Dir)
+	absPath, err := filepath.Abs(args.Dir)
 	if err != nil {
+		return errorResult(err.Error()), nil, nil
+	}
+	if err := roots.Global.Validate(absPath); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 

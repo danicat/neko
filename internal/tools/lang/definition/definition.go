@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/roots"
@@ -16,6 +17,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	ProjectRoot() string
 }
 
 // Register registers the find_definition tool with the server.
@@ -38,8 +40,21 @@ type Params struct {
 }
 
 func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.File)
-	if err != nil {
+	var absPath string
+	if args.File == "" || args.File == "." {
+		absPath = s.ProjectRoot()
+		if absPath == "" {
+			absPath, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absPath, err = filepath.Abs(args.File)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
+	}
+
+	if err := roots.Global.Validate(absPath); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 
@@ -57,7 +72,10 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 		return errorResult(fmt.Sprintf("LSP server %q not found in PATH", command)), nil, nil
 	}
 
-	workspaceRoot, _ := roots.Global.Validate(".")
+	workspaceRoot := s.ProjectRoot()
+	if workspaceRoot == "" {
+		workspaceRoot, _ = filepath.Abs(".")
+	}
 	client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, command, cmdArgs, be.LanguageID(), be.InitializationOptions())
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil

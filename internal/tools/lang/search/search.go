@@ -14,6 +14,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	RAG() *rag.Engine
+	ProjectRoot() string
 }
 
 // Register registers the semantic_search tool with the server.

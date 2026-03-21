@@ -15,7 +15,8 @@ import (
 )
 
 type testServer struct {
-	reg *backend.Registry
+	reg  *backend.Registry
+	root string
 }
 
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
@@ -24,6 +25,14 @@ func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBa
 
 func (ts *testServer) RAG() *rag.Engine {
 	return nil
+}
+
+func (ts *testServer) ProjectRoot() string {
+	return ts.root
+}
+
+func (ts *testServer) ProjectOpen() bool {
+	return ts.root != ""
 }
 
 type noLSPBackend struct {

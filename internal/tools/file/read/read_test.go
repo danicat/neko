@@ -17,6 +17,7 @@ import (
 type testServer struct {
 	reg      *backend.Registry
 	seenDocs map[string]map[string]bool
+	root     string
 }
 
 func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBackend {
@@ -29,6 +30,14 @@ func (ts *testServer) RAG() *rag.Engine {
 
 func (ts *testServer) HasSeenTypeInfo(name string) bool {
 	return false
+}
+
+func (ts *testServer) ProjectRoot() string {
+	return ts.root
+}
+
+func (ts *testServer) ProjectOpen() bool {
+	return ts.root != ""
 }
 
 func (ts *testServer) ShouldShowDoc(lang, pkg string) bool {

@@ -4,6 +4,7 @@ package mutation
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/roots"
@@ -15,6 +16,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ResolveBackend(language string) (backend.LanguageBackend, error)
+	ProjectRoot() string
 }
 
 // Register registers the test_mutations tool with the server.
@@ -36,12 +38,21 @@ type Params struct {
 }
 
 func mutationHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	dir := args.Dir
-	if dir == "" {
-		dir = "."
+	var absDir string
+	if args.Dir == "" || args.Dir == "." {
+		absDir = s.ProjectRoot()
+		if absDir == "" {
+			absDir, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absDir, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
 	}
-	absDir, err := roots.Global.Validate(dir)
-	if err != nil {
+
+	if err := roots.Global.Validate(absDir); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 

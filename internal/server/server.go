@@ -51,6 +51,7 @@ type Server struct {
 	activeBackends map[string]backend.LanguageBackend // keyed by Name()
 	seenDocs       map[string]map[string]bool
 	seenTypeInfo   map[string]bool // Session-level memoization for Type Info
+	crawlCancel    context.CancelFunc
 }
 
 // New creates a new Server instance with the given registry and config.
@@ -211,6 +212,20 @@ func (s *Server) registerHandlersLocked() error {
 	return nil
 }
 
+// ProjectRoot returns the current active project root.
+func (s *Server) ProjectRoot() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.projectRoot
+}
+
+// ProjectOpen returns true if a project is currently open.
+func (s *Server) ProjectOpen() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.projectOpen
+}
+
 // Registry returns the backend registry for external access.
 func (s *Server) Registry() *backend.Registry {
 	return s.registry
@@ -290,8 +305,10 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	engine, err := rag.NewEngine(ctx, absRoot)
 	if err == nil {
 		s.ragEngine = engine
-		// Initial crawl (async but synchronous for the purpose of the engine initialization)
-		go s.crawlProject(context.Background(), absRoot)
+		// Initial crawl (async)
+		crawlCtx, crawlCancel := context.WithCancel(context.Background())
+		s.crawlCancel = crawlCancel
+		go s.crawlProject(crawlCtx, absRoot)
 	} else {
 		log.Printf("WARN: Disabling semantic_search tool: %v", err)
 	}
@@ -319,6 +336,9 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 
 func (s *Server) crawlProject(ctx context.Context, root string) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -399,8 +419,15 @@ func (s *Server) ForFile(ctx context.Context, path string) backend.LanguageBacke
 func (s *Server) openProjectHandler(ctx context.Context, _ *mcp.CallToolRequest, args struct {
 	Dir string `json:"dir" jsonschema:"The root directory of the project"`
 }) (*mcp.CallToolResult, any, error) {
-	absRoot, err := roots.Global.Validate(args.Dir)
+	absRoot, err := filepath.Abs(args.Dir)
 	if err != nil {
+		return &mcp.CallToolResult{
+			IsError: true,
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid path: %v", err)}},
+		}, nil, nil
+	}
+
+	if err := roots.Global.Validate(absRoot); err != nil {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
@@ -424,7 +451,7 @@ func (s *Server) createProjectHandler(ctx context.Context, req *mcp.CallToolRequ
 	}
 
 	// 2. Open the newly created project
-	absRoot, _ := roots.Global.Validate(args.Dir)
+	absRoot, _ := filepath.Abs(args.Dir)
 	backends := s.registry.DetectBackends(absRoot)
 
 	// If detection failed (e.g. no marker yet), manually add the requested language backend
@@ -450,10 +477,15 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 	lsp.DefaultManager.CloseAll()
 
 	s.mu.Lock()
+	if s.crawlCancel != nil {
+		s.crawlCancel()
+		s.crawlCancel = nil
+	}
 	s.projectOpen = false
 	s.projectRoot = ""
 	s.activeBackends = make(map[string]backend.LanguageBackend)
 	s.seenDocs = make(map[string]map[string]bool)
+	s.seenTypeInfo = make(map[string]bool)
 	s.registerHandlersLocked()
 	s.mu.Unlock()
 

@@ -4,6 +4,7 @@ package get
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
@@ -16,6 +17,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ResolveBackend(language string) (backend.LanguageBackend, error)
+	ProjectRoot() string
 }
 
 // Register registers the add_dependencies tool with the server.
@@ -42,12 +44,21 @@ func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Serv
 		return errorResult("at least one package is required"), nil, nil
 	}
 
-	dir := args.Dir
-	if dir == "" {
-		dir = "."
+	var absDir string
+	if args.Dir == "" || args.Dir == "." {
+		absDir = s.ProjectRoot()
+		if absDir == "" {
+			absDir, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absDir, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
 	}
-	absDir, err := roots.Global.Validate(dir)
-	if err != nil {
+
+	if err := roots.Global.Validate(absDir); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 

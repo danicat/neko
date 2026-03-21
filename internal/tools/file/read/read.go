@@ -18,12 +18,16 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// identRe matches Go identifiers for type info extraction.
+var identRe = regexp.MustCompile(`\b[a-zA-Z_][a-zA-Z0-9_]*\b`)
+
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ShouldShowDoc(language, pkg string) bool
 	HasSeenTypeInfo(name string) bool
 	RAG() *rag.Engine
+	ProjectRoot() string
 }
 
 // Register registers the read_file tool with the server.
@@ -47,8 +51,21 @@ type Params struct {
 }
 
 func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.File)
-	if err != nil {
+	var absPath string
+	if args.File == "" || args.File == "." {
+		absPath = s.ProjectRoot()
+		if absPath == "" {
+			absPath, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absPath, err = filepath.Abs(args.File)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
+	}
+
+	if err := roots.Global.Validate(absPath); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 	args.File = absPath
@@ -61,7 +78,10 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		var lspClient *lsp.Client
 		if be != nil {
 			if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-				workspaceRoot, _ := roots.Global.Validate(".")
+				workspaceRoot := s.ProjectRoot()
+				if workspaceRoot == "" {
+					workspaceRoot, _ = filepath.Abs(".")
+				}
 				if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 					lspClient = client
 					symbols, err := lspClient.DocumentSymbol(ctx, absPath)
@@ -74,6 +94,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 		// Fallback to backend parser if LSP failed or not available
 		if out == "" && be != nil {
+			var err error
 			out, err = be.Outline(ctx, absPath)
 			if err != nil {
 				return errorResult(fmt.Sprintf("failed to generate outline: %v", err)), nil, nil
@@ -124,7 +145,10 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	var lspClient *lsp.Client
 	if be != nil {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				lspClient = client
 				lspClient.DidOpen(ctx, absPath, original)
@@ -159,8 +183,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		line int
 		col  int
 	}
-	// Simple identifier regex
-	re := regexp.MustCompile(`\b[a-zA-Z_][a-zA-Z0-9_]*\b`)
+	re := identRe
 	// Keywords to skip
 	keywords := map[string]bool{
 		"func": true, "var": true, "type": true, "struct": true, "interface": true,
@@ -211,7 +234,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 					if !strings.HasSuffix(loc.URI, filepath.Base(absPath)) {
 						isExternal = true
 					}
-					if be.IsStdLibURI(loc.URI) {
+					if be != nil && be.IsStdLibURI(loc.URI) {
 						isStdLib = true
 					}
 				}

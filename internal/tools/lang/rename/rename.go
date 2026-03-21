@@ -3,8 +3,10 @@ package rename
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
@@ -17,6 +19,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	ProjectRoot() string
 }
 
 // Register registers the rename_symbol tool with the server.
@@ -40,8 +43,21 @@ type Params struct {
 }
 
 func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	absPath, err := roots.Global.Validate(args.File)
-	if err != nil {
+	var absPath string
+	if args.File == "" || args.File == "." {
+		absPath = s.ProjectRoot()
+		if absPath == "" {
+			absPath, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absPath, err = filepath.Abs(args.File)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
+	}
+
+	if err := roots.Global.Validate(absPath); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 
@@ -55,7 +71,10 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		return errorResult(fmt.Sprintf("no LSP server configured for %s", be.Name())), nil, nil
 	}
 
-	workspaceRoot, _ := roots.Global.Validate(".")
+	workspaceRoot := s.ProjectRoot()
+	if workspaceRoot == "" {
+		workspaceRoot, _ = filepath.Abs(".")
+	}
 	client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 	if err != nil {
 		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil
@@ -75,8 +94,29 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 
 	modifiedFiles := make(map[string]bool)
 
-	// In Neko v0.2.0, we prioritize WorkspaceEdit.Changes
-	for uri, edits := range edit.Changes {
+	// Collect edits: prefer DocumentChanges (gopls default), fall back to Changes
+	fileEdits := make(map[string][]lsp.TextEdit)
+
+	if len(edit.DocumentChanges) > 0 {
+		for _, raw := range edit.DocumentChanges {
+			var tde lsp.TextDocumentEdit
+			if err := json.Unmarshal(raw, &tde); err != nil {
+				continue
+			}
+			uri := tde.TextDocument.URI
+			fileEdits[uri] = append(fileEdits[uri], tde.Edits...)
+		}
+	} else {
+		for uri, edits := range edit.Changes {
+			fileEdits[uri] = edits
+		}
+	}
+
+	if len(fileEdits) == 0 {
+		return errorResult("rename produced no changes"), nil, nil
+	}
+
+	for uri, edits := range fileEdits {
 		path := lsp.URIToPath(uri)
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -101,7 +141,10 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 
 	// Pull final health
 	allDiags := client.GetAllDiagnostics()
-	workspaceRoot, _ = roots.Global.Validate(".")
+	workspaceRoot = s.ProjectRoot()
+	if workspaceRoot == "" {
+		workspaceRoot, _ = filepath.Abs(".")
+	}
 	resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 
 	return &mcp.CallToolResult{

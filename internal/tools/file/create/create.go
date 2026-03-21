@@ -20,6 +20,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	RAG() *rag.Engine
+	ProjectRoot() string
 }
 
 // Register registers the create_file tool with the server.
@@ -45,8 +46,11 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		return errorResult("name (file path) cannot be empty"), nil, nil
 	}
 
-	absPath, err := roots.Global.Validate(args.File)
+	absPath, err := filepath.Abs(args.File)
 	if err != nil {
+		return errorResult(err.Error()), nil, nil
+	}
+	if err := roots.Global.Validate(absPath); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
 	args.File = absPath
@@ -62,7 +66,10 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 	var lspClient *lsp.Client
 	if be != nil {
 		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
-			workspaceRoot, _ := roots.Global.Validate(".")
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
 			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 		}
 	}
@@ -130,7 +137,10 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 
 	if lspClient != nil {
 		allDiags := lspClient.GetAllDiagnostics()
-		workspaceRoot, _ := roots.Global.Validate(".")
+		workspaceRoot := s.ProjectRoot()
+		if workspaceRoot == "" {
+			workspaceRoot, _ = filepath.Abs(".")
+		}
 		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 	} else {
 		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")

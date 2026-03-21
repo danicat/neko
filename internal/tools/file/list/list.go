@@ -19,6 +19,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	Registry() *backend.Registry
+	ProjectRoot() string
 }
 
 // Register registers the tool with the server.
@@ -40,11 +41,24 @@ type Params struct {
 }
 
 func listHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
-	absRoot, err := roots.Global.Validate(args.Dir)
+	var absRoot string
+	if args.Dir == "" || args.Dir == "." {
+		absRoot = s.ProjectRoot()
+		if absRoot == "" {
+			absRoot, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absRoot, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
+	}
 
-	if err != nil {
+	if err := roots.Global.Validate(absRoot); err != nil {
 		return errorResult(err.Error()), nil, nil
 	}
+	args.Dir = absRoot
 
 	maxDepth := args.Depth
 	if maxDepth == 0 {
@@ -150,7 +164,7 @@ func walkDir(absRoot string, maxDepth int, skipDirs []string) (*mcp.CallToolResu
 			return nil
 		}
 
-		if d.IsDir() && (skipSet[d.Name()] || d.Name() == ".git" || d.Name() == ".idea" || d.Name() == ".vscode" || d.Name() == "node_modules") {
+		if d.IsDir() && skipSet[d.Name()] {
 			return filepath.SkipDir
 		}
 
@@ -186,7 +200,7 @@ func walkDir(absRoot string, maxDepth int, skipDirs []string) (*mcp.CallToolResu
 }
 
 func defaultSkipDirs() []string {
-	return []string{"__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox", "dist", "build", ".eggs"}
+	return []string{".git", ".idea", ".vscode", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox", "dist", "build", ".eggs"}
 }
 
 func errorResult(msg string) *mcp.CallToolResult {

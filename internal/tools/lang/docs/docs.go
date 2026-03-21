@@ -4,11 +4,11 @@ package docs
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang"
-	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/toolnames"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -17,6 +17,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ResolveBackend(language string) (backend.LanguageBackend, error)
+	ProjectRoot() string
 }
 
 // Register registers the read_docs tool with the server.
@@ -54,12 +55,22 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		return errorResult("invalid format: must be 'markdown' or 'json'"), nil, nil
 	}
 
-	dir := args.Dir
-	if dir == "" {
-		dir = "."
+	var absDir string
+	if args.Dir == "" || args.Dir == "." {
+		absDir = s.ProjectRoot()
+		if absDir == "" {
+			absDir, _ = filepath.Abs(".")
+		}
+	} else {
+		var err error
+		absDir, err = filepath.Abs(args.Dir)
+		if err != nil {
+			return errorResult(err.Error()), nil, nil
+		}
 	}
-	absDir, _ := roots.Global.Validate(dir)
 
+	// For documentation, we don't strictly enforce boundary check if it's external,
+	// but we resolve the path for language detection.
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
 		return errorResult(err.Error()), nil, nil

@@ -24,7 +24,9 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 		if err := runGoCmd(ctx, dir, "go", "mod", "tidy"); err != nil {
 			fmt.Fprintf(&sb, "### ⚠️ Auto-Fix: `go mod tidy` Failed\n> %v\n\n", err)
 		}
-		_ = runGoCmd(ctx, dir, "gofmt", "-w", ".")
+		if err := runGoCmd(ctx, dir, "gofmt", "-w", "."); err != nil {
+			fmt.Fprintf(&sb, "### ⚠️ Auto-Fix: `gofmt` Failed\n> %v\n\n", err)
+		}
 	}
 
 	// 2. Build

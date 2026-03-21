@@ -717,12 +717,18 @@ func FormatLocations(locations []Location) string {
 }
 
 // EnrichLocations adds context (containing symbol name) to a list of locations.
-func (c *Client) EnrichLocations(ctx context.Context, locations []Location) string {
+func (c *Client) EnrichLocations(ctx context.Context, locations []Location, workspaceRoot string) string {
 	var source []string
 	var tests []string
 
 	for _, loc := range locations {
 		path := URIToPath(loc.URI)
+		displayPath := path
+		if workspaceRoot != "" {
+			if rel, err := filepath.Rel(workspaceRoot, path); err == nil {
+				displayPath = rel
+			}
+		}
 		symbol, _ := c.GetSymbolAt(ctx, path, loc.Range.Start.Line+1, loc.Range.Start.Character+1)
 
 		context := ""
@@ -730,9 +736,9 @@ func (c *Client) EnrichLocations(ctx context.Context, locations []Location) stri
 			context = fmt.Sprintf(" (in '%s')", symbol)
 		}
 
-		entry := fmt.Sprintf("- %s:%d:%d%s", path, loc.Range.Start.Line+1, loc.Range.Start.Character+1, context)
+		entry := fmt.Sprintf("- %s:%d:%d%s", displayPath, loc.Range.Start.Line+1, loc.Range.Start.Character+1, context)
 
-		if strings.Contains(path, "_test.go") || strings.Contains(filepath.Base(path), "test_") {
+		if strings.HasSuffix(path, "_test.go") || strings.HasPrefix(filepath.Base(path), "test_") {
 			tests = append(tests, entry)
 		} else {
 			source = append(source, entry)
@@ -761,21 +767,20 @@ func (c *Client) EnrichLocations(ctx context.Context, locations []Location) stri
 
 // GetSymbolAt returns the name of the symbol containing the given position.
 func (c *Client) GetSymbolAt(ctx context.Context, file string, line, col int) (string, error) {
-	// Simple implementation: use hover to get symbol context if possible,
-	// or we could use documentSymbol and find the range. Hover is often enough.
 	hover, err := c.Hover(ctx, file, line, col)
 	if err != nil {
 		return "", err
 	}
-	// Hover text often contains the signature, e.g. "func (*Server).establishProject"
-	// We'll try to extract a clean name.
 	text := HoverText(hover)
 	lines := strings.Split(text, "\n")
-	if len(lines) > 0 {
-		firstLine := lines[0]
-		// Clean up common markdown formatting from LSP
-		firstLine = strings.Trim(firstLine, "`")
-		return firstLine, nil
+	// Skip markdown code fence lines (e.g. "```go" or "```")
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" || strings.HasPrefix(trimmed, "```") {
+			continue
+		}
+		trimmed = strings.Trim(trimmed, "`")
+		return trimmed, nil
 	}
 	return "", nil
 }
@@ -978,7 +983,9 @@ func (c *Client) readLoop() {
 			c.mu.Unlock()
 			if ch != nil {
 				var resp jsonrpcResponse
-				json.Unmarshal(msg, &resp)
+				if err := json.Unmarshal(msg, &resp); err != nil {
+					continue
+				}
 				ch <- &resp
 			}
 		}

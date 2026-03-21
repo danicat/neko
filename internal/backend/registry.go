@@ -3,6 +3,7 @@ package backend
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -74,6 +75,7 @@ func (r *Registry) Available() []string {
 	for name := range r.backends {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
