@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
-	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/core/shared"
 	"github.com/danicat/neko/internal/core/textdist"
@@ -21,7 +20,8 @@ import (
 
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
-	RAG() *rag.Engine
+	IngestFile(ctx context.Context, path string, content string, symbols []lsp.DocumentSymbol, imports []string) error
+	RAGEnabled() bool
 	ProjectRoot() string
 }
 
@@ -294,7 +294,7 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 	resSb.WriteString(fmt.Sprintf("✅ Successfully edited %s\n", args.File))
 
 	// Synchronous RAG Re-indexing
-	if engine := s.RAG(); engine != nil {
+	if s.RAGEnabled() {
 		var symbols []lsp.DocumentSymbol
 		if lspClient != nil {
 			symbols, _ = lspClient.DocumentSymbol(ctx, args.File)
@@ -303,7 +303,9 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 		if be != nil {
 			imports, _ = be.ParseImports(ctx, args.File)
 		}
-		engine.IngestFile(ctx, args.File, newContent, symbols, imports)
+		if err := s.IngestFile(ctx, args.File, newContent, symbols, imports); err != nil {
+			resSb.WriteString(fmt.Sprintf("\n**⚠️ RAG indexing failed:** %v\n", err))
+		}
 	}
 
 	if lspClient != nil {
@@ -373,6 +375,9 @@ func findMatches(content, search string) []MatchResult {
 
 	candidates := make(map[int]int)
 	checkSeed := func(offset int) {
+		if offset < 0 || offset+seedLen > len(searchRunes) {
+			return
+		}
 		seed := string(searchRunes[offset : offset+seedLen])
 		startSearch := 0
 		for {

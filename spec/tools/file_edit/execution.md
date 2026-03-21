@@ -16,8 +16,9 @@ The true power of `edit_file` lies not just in changing text, but in its synchro
    - The formatted, import-adjusted content is written to disk.
 
 4. **Synchronous RAG Re-Indexing**:
-   - Neko immediately ingests the updated file into the local RAG vector database (`engine.IngestFile`).
+   - If `s.RAGEnabled()` is true, Neko immediately ingests the updated file via `s.IngestFile()`.
    - It enriches this ingestion with document symbols (from the LSP) and import paths (from the backend), ensuring that subsequent semantic searches immediately reflect the new code structure.
+   - Ingestion errors are surfaced in the tool response (not silently discarded).
 
 5. **LSP Synchronization (`didSave`)**:
    - A `textDocument/didSave` notification is sent to the LSP to trigger its internal re-indexing and validation.

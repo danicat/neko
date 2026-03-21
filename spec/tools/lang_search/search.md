@@ -14,8 +14,8 @@ The `semantic_search` tool (`internal/tools/lang/search/search.go`) provides the
 
 1. **Handler Delegation**:
    - The tool receives a natural language query string and an optional result limit.
-   - It delegates the query to `s.RAG().Search(ctx, query, limit)`.
-   - The tool is only registered if the RAG engine was successfully initialized (i.e., `ragEngine != nil`).
+   - It delegates the query to `s.RAGSearch(ctx, query, limit)`, which returns `[]rag.SearchResult` or `ErrRAGNotInitialized`.
+   - The tool is only registered if the RAG engine was successfully initialized (i.e., `s.RAGEnabled()` is true).
 
 2. **Result Formatting**:
    - The engine returns a list of semantic matches, each with a similarity score and metadata (path, line, symbol name).

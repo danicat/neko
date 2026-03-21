@@ -15,7 +15,7 @@ Once the ingestion pipeline has built the vector database, the `search` tool (`i
    - The RAG engine performs a cosine similarity search (or a similar nearest-neighbor algorithm) within the local vector database.
    - It compares the query vector against all stored chunk vectors to find the closest matches.
 
-4. **Result Assembly & Context Windowing**:
-   - The engine retrieves the top-N closest metadata records (file path, line ranges).
-   - To provide actionable context, it uses the line ranges to extract not just the raw chunk, but also the surrounding lines of code (a "context window") from the source file.
-   - These enriched results are formatted into snippet blocks and returned to the LLM.
+4. **Result Assembly**:
+   - The engine returns `[]rag.SearchResult`, a wrapper type that encapsulates content, metadata, and similarity score without leaking the underlying `chromem` dependency.
+   - Results are formatted into Markdown snippet blocks containing the raw chunk content, file path, line number, symbol name, and similarity score.
+   - No additional context window extraction is performed — the result contains the chunk as stored in the vector database.

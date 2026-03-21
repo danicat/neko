@@ -127,7 +127,26 @@ func (e *Engine) IngestFile(ctx context.Context, path string, content string, sy
 	return nil
 }
 
+// SearchResult represents a single semantic search result.
+type SearchResult struct {
+	Content    string
+	Metadata   map[string]string
+	Similarity float32
+}
+
 // Search finds similar code snippets.
-func (e *Engine) Search(ctx context.Context, query string, limit int) ([]chromem.Result, error) {
-	return e.collection.Query(ctx, query, limit, nil, nil)
+func (e *Engine) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+	results, err := e.collection.Query(ctx, query, limit, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SearchResult, len(results))
+	for i, r := range results {
+		out[i] = SearchResult{
+			Content:    r.Content,
+			Metadata:   r.Metadata,
+			Similarity: r.Similarity,
+		}
+	}
+	return out, nil
 }

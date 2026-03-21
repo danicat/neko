@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
-	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/lsp"
 	"github.com/danicat/neko/internal/toolnames"
@@ -19,7 +18,8 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
-	RAG() *rag.Engine
+	IngestFile(ctx context.Context, path string, content string, symbols []lsp.DocumentSymbol, imports []string) error
+	RAGEnabled() bool
 	ProjectRoot() string
 }
 
@@ -114,7 +114,8 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 	}
 
 	// Synchronous RAG Re-indexing
-	if engine := s.RAG(); engine != nil {
+	var ragErr error
+	if s.RAGEnabled() {
 		var symbols []lsp.DocumentSymbol
 		if lspClient != nil {
 			symbols, _ = lspClient.DocumentSymbol(ctx, args.File)
@@ -123,7 +124,7 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		if be != nil {
 			imports, _ = be.ParseImports(ctx, args.File)
 		}
-		engine.IngestFile(ctx, args.File, string(finalContent), symbols, imports)
+		ragErr = s.IngestFile(ctx, args.File, string(finalContent), symbols, imports)
 	}
 
 	if lspClient != nil {
@@ -147,6 +148,10 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		if warning != "" {
 			resSb.WriteString(warning)
 		}
+	}
+
+	if ragErr != nil {
+		resSb.WriteString(fmt.Sprintf("\n**⚠️ RAG indexing failed:** %v\n", ragErr))
 	}
 
 	return &mcp.CallToolResult{

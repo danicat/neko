@@ -21,8 +21,9 @@ The `create_file` tool (`internal/tools/file/create/create.go`) initializes a ne
    - If LSP is unavailable but a backend exists, falls back to `be.Validate()` for basic syntax checking.
 
 3. **RAG Re-Indexing**:
-   - After writing the file, if the RAG engine is active, the new file is synchronously ingested via `engine.IngestFile`.
+   - After writing the file, if `s.RAGEnabled()` is true, the new file is synchronously ingested via `s.IngestFile()`.
    - Document symbols (from LSP) and imports (from backend) are passed alongside the content for richer semantic indexing.
+   - Ingestion errors are surfaced in the tool response (not silently discarded).
 
 4. **Diagnostics Reporting**:
    - Returns a Markdown response with a success header and a formatted diagnostics report across the entire workspace.

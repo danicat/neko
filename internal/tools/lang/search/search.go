@@ -13,7 +13,8 @@ import (
 
 // Server defines the interface required by the tool.
 type Server interface {
-	RAG() *rag.Engine
+	RAGSearch(ctx context.Context, query string, limit int) ([]rag.SearchResult, error)
+	RAGEnabled() bool
 	ProjectRoot() string
 }
 
@@ -40,11 +41,6 @@ func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		return errorResult("query is required"), nil, nil
 	}
 
-	engine := s.RAG()
-	if engine == nil {
-		return errorResult("RAG engine not initialized for this project"), nil, nil
-	}
-
 	limit := args.Limit
 	if limit <= 0 {
 		limit = 5
@@ -53,7 +49,7 @@ func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		limit = 10
 	}
 
-	results, err := engine.Search(ctx, args.Query, limit)
+	results, err := s.RAGSearch(ctx, args.Query, limit)
 	if err != nil {
 		return errorResult(fmt.Sprintf("search failed: %v", err)), nil, nil
 	}

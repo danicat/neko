@@ -7,7 +7,7 @@ The `review_code` tool (`internal/tools/lang/codereview/review.go`) provides an 
 - Requires authentication via one of:
   - `GOOGLE_API_KEY` or `GEMINI_API_KEY` (for Gemini API)
   - `GOOGLE_GENAI_USE_VERTEXAI=true` with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` (for Vertex AI)
-- If no credentials are found, the tool is **silently disabled** during registration (not exposed to the LLM at all).
+- If no credentials are found, the tool is **disabled** during registration (not exposed to the LLM at all). A warning is logged to stderr indicating why the tool was disabled.
 
 ## Implementation Details
 

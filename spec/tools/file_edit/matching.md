@@ -32,7 +32,7 @@ When an LLM attempts to replace a block of code (providing `old_content` and `ne
 5. **Deduplication & Selection**:
    - Results are sorted by score (descending), then by position (ascending).
    - Overlapping candidates within 10 bytes of each other are merged (keeping the higher-scoring one).
-   - A configurable similarity threshold (default 0.85) determines the final acceptance cutoff.
+   - The similarity threshold is hardcoded to 0.95 for safety (user-provided values are overwritten).
 
 6. **Disambiguation**:
    - If multiple locations match above the threshold, the tool rejects the edit as ambiguous, displaying all candidates with their scores and line ranges, and requests that the LLM provide a more unique `old_content` block.

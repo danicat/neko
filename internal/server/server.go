@@ -36,12 +36,18 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// ErrRAGNotInitialized is returned when a RAG operation is attempted without an active engine.
+var ErrRAGNotInitialized = fmt.Errorf("RAG engine not initialized for this project")
+
 // Server encapsulates the MCP server and its configuration.
 type Server struct {
 	mcpServer       *mcp.Server
 	cfg             *config.Config
 	registry        *backend.Registry
 	registeredTools map[string]bool
+
+	// App lifecycle
+	appCtx context.Context
 
 	// Project state
 	mu             sync.Mutex
@@ -81,6 +87,7 @@ func New(cfg *config.Config, version string, reg *backend.Registry) *Server {
 
 // Run starts the MCP server using Stdio.
 func (s *Server) Run(ctx context.Context) error {
+	s.appCtx = ctx
 	defer lsp.DefaultManager.CloseAll()
 	if err := s.RegisterHandlers(); err != nil {
 		return err
@@ -90,6 +97,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 // ServeHTTP starts the server over HTTP using StreamableHTTP.
 func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
+	s.appCtx = ctx
 	defer lsp.DefaultManager.CloseAll()
 	if err := s.RegisterHandlers(); err != nil {
 		return err
@@ -231,9 +239,25 @@ func (s *Server) Registry() *backend.Registry {
 	return s.registry
 }
 
-// RAG returns the semantic search engine.
-func (s *Server) RAG() *rag.Engine {
-	return s.ragEngine
+// IngestFile indexes a file in the RAG engine. Returns ErrRAGNotInitialized if RAG is not active.
+func (s *Server) IngestFile(ctx context.Context, path string, content string, symbols []lsp.DocumentSymbol, imports []string) error {
+	if s.ragEngine == nil {
+		return ErrRAGNotInitialized
+	}
+	return s.ragEngine.IngestFile(ctx, path, content, symbols, imports)
+}
+
+// RAGSearch performs a semantic search. Returns an error if RAG is not initialized.
+func (s *Server) RAGSearch(ctx context.Context, query string, limit int) ([]rag.SearchResult, error) {
+	if s.ragEngine == nil {
+		return nil, ErrRAGNotInitialized
+	}
+	return s.ragEngine.Search(ctx, query, limit)
+}
+
+// RAGEnabled returns whether the RAG engine is initialized.
+func (s *Server) RAGEnabled() bool {
+	return s.ragEngine != nil
 }
 
 // ShouldShowDoc returns true if the documentation for the given package in the given language has not been shown yet.
@@ -319,7 +343,7 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	if err == nil {
 		s.ragEngine = engine
 		// Initial crawl (async)
-		crawlCtx, crawlCancel := context.WithCancel(context.Background())
+		crawlCtx, crawlCancel := context.WithCancel(s.appCtx)
 		s.crawlCancel = crawlCancel
 		go s.crawlProject(crawlCtx, absRoot)
 	} else {
@@ -348,16 +372,22 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 }
 
 func (s *Server) crawlProject(ctx context.Context, root string) {
+	skipDirs := map[string]bool{".git": true, ".neko": true}
+	for _, d := range s.registry.AllSkipDirs() {
+		skipDirs[d] = true
+	}
+
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err != nil || info.IsDir() {
+		if err != nil {
 			return nil
 		}
-
-		// Basic skip logic (should use SkipDirs from backends)
-		if strings.Contains(path, ".git") || strings.Contains(path, "node_modules") {
+		if info.IsDir() {
+			if skipDirs[info.Name()] {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -380,7 +410,9 @@ func (s *Server) crawlProject(ctx context.Context, root string) {
 		}
 
 		imports, _ := be.ParseImports(ctx, path)
-		s.ragEngine.IngestFile(ctx, path, string(content), symbols, imports)
+		if err := s.ragEngine.IngestFile(ctx, path, string(content), symbols, imports); err != nil {
+			log.Printf("RAG ingest %s: %v", path, err)
+		}
 		return nil
 	})
 	if err != nil {

@@ -13,9 +13,11 @@ The `build` tool (`internal/tools/lang/quality/build.go`) forces the LLM to veri
    - For Go, the auto-fix pipeline runs in order: `go mod tidy` → `gofmt -w .` → build → test → lint.
    - If `gofmt` fails, the error is logged as a warning in the output rather than silently ignored.
 
-3. **Markdown Reporting**:
-   - The backend constructs a Markdown-formatted string directly (not a struct), organizing results into sections:
-     - **Build status**: Compiler errors with file/line references.
-     - **Test results**: Pass/fail summary with coverage percentage when available.
-     - **Lint output**: Warnings and suggestions from `golangci-lint` (via `go tool`).
+3. **Structured Reporting**:
+   - The backend returns a `*BuildReport` struct containing an `Output` string (Markdown-formatted) and an `IsError` bool.
+   - The output is organized into emoji-prefixed sections:
+     - **🛠️ Build**: Compiler errors with file/line references.
+     - **🚀 Modernize**: Legacy pattern detection (when `RunModernize` is enabled).
+     - **🧪 Tests**: Pass/fail summary with coverage percentage when available.
+     - **🧹 Lint**: Warnings and suggestions from `golangci-lint` (via `go tool`).
    - This succinct Markdown report highlights exactly what failed so the LLM can fix it in the next turn, without flooding the context with thousands of lines of raw terminal output.

@@ -19,7 +19,7 @@ If `EnsureTools` fails (e.g., no network), the error is logged as a warning but 
 
 ## Go Tools
 
-The Go backend requires three external tools:
+The Go backend requires four external tools:
 
 | Tool | Module Path | Purpose |
 |------|-------------|---------|

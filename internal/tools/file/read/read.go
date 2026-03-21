@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
-	"github.com/danicat/neko/internal/core/rag"
 	"github.com/danicat/neko/internal/core/roots"
 	"github.com/danicat/neko/internal/core/shared"
 	"github.com/danicat/neko/internal/lsp"
@@ -26,7 +25,6 @@ type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ShouldShowDoc(language, pkg string) bool
 	HasSeenTypeInfo(name string) bool
-	RAG() *rag.Engine
 	ProjectRoot() string
 }
 
@@ -175,7 +173,6 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	var contentWithLines strings.Builder
 	var typeInfoEntries []string
-	seenTypes := make(map[string]bool)
 
 	// Build the line-by-line view and collect identifiers for Type Info
 	var idents []struct {
@@ -242,7 +239,6 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 			if isExternal && !isStdLib {
 				text, err := lspClient.EnhancedHover(ctx, absPath, id.line, id.col)
 				if err == nil && text != "" {
-					seenTypes[id.name] = true
 					formattedInfo := formatTypeInfo(id.line, id.name, text)
 					if formattedInfo != "" {
 						typeInfoEntries = append(typeInfoEntries, formattedInfo)

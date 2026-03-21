@@ -27,12 +27,18 @@ The Neko MCP Server initializes in a restricted "Lobby" state. A strict state ma
    - **Opened Phase**: The server exposes the full suite of language-specific tools (gated by backend capabilities) and kicks off background indexing.
 
 4. **Crawl Lifecycle**:
+   - The `Server` struct stores the app-level context (`appCtx`), set once during `Run()` or `ServeHTTP()`. This context is tied to OS signal handling (SIGINT/SIGTERM) for clean shutdown.
    - Each call to `establishProject` cancels any in-progress crawl via `crawlCancel` before starting a new one.
-   - `crawlProject` checks `ctx.Err()` at each file iteration, enabling clean cancellation.
+   - The crawl context is derived from `s.appCtx` (not `context.Background()`), so app shutdown cascades to cancel the crawl goroutine automatically.
+   - `crawlProject` checks `ctx.Err()` at each file iteration, enabling clean cancellation from either project re-open or app shutdown.
    - On `close_project`, the crawl is cancelled, the RAG engine is set to nil, and `seenTypeInfo` is reset.
 
-5. **Public Accessors**:
+5. **Public Methods**:
    - `ProjectRoot() string`: Returns the current project root (mutex-protected).
    - `ProjectOpen() bool`: Returns whether a project is currently open (mutex-protected).
-   - `RAG() *rag.Engine`: Returns the semantic search engine.
+   - `RAGEnabled() bool`: Returns whether the RAG engine is initialized for the current project.
+   - `IngestFile(ctx, path, content, symbols, imports) error`: Ingests a file into the RAG engine. Returns `ErrRAGNotInitialized` if no engine is active.
+   - `RAGSearch(ctx, query, limit) ([]rag.SearchResult, error)`: Performs a semantic search. Returns `ErrRAGNotInitialized` if no engine is active.
    - `ResolveBackend(language string)`: Returns the appropriate backend, auto-selecting when only one is active.
+
+   The RAG engine is **not** exposed directly. Instead, purpose-specific methods (`IngestFile`, `RAGSearch`, `RAGEnabled`) encapsulate all RAG operations and return the sentinel error `ErrRAGNotInitialized` when the engine is nil.

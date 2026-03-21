@@ -19,5 +19,6 @@ The `add_dependencies` tool (`internal/tools/lang/get/get.go`) simplifies projec
 
 4. **Synchronous Documentation (The "Get and Learn" pattern)**:
    - After a successful installation, the tool doesn't just return "success".
-   - It iterates through the installed packages, strips version tags (e.g., `@latest`), and immediately calls `be.FetchDocs(ctx, dir, strippedPkg, "")`.
+   - It iterates through the installed packages and immediately calls `be.FetchDocs(ctx, dir, pkg, "")` for each one.
+   - Note: version tags (e.g., `@latest`) are currently passed through to `FetchDocs` without stripping — the backend's doc fetcher is expected to handle this.
    - By returning the API documentation of the newly installed package directly in the tool result, the LLM is instantly equipped with the package's signatures and can begin implementing the integration in the very next turn.

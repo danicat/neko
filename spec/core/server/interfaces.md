@@ -10,12 +10,23 @@ Each tool package defines its own minimal `Server` interface containing **only t
 ```go
 // In internal/tools/lang/search/search.go
 type Server interface {
-    RAG() *rag.Engine
+    RAGSearch(ctx context.Context, query string, limit int) ([]rag.SearchResult, error)
+    RAGEnabled() bool
     ProjectRoot() string
 }
 ```
 
-This follows the Go principle of small, composable interfaces. The main `server.Server` struct satisfies all of these interfaces, but each tool only sees the surface it requires.
+```go
+// In internal/tools/file/create/create.go
+type Server interface {
+    ForFile(ctx context.Context, path string) backend.LanguageBackend
+    IngestFile(ctx context.Context, path string, content string, symbols []lsp.DocumentSymbol, imports []string) error
+    RAGEnabled() bool
+    ProjectRoot() string
+}
+```
+
+This follows the Go principle of small, composable interfaces. The main `server.Server` struct satisfies all of these interfaces, but each tool only sees the surface it requires. Notably, no tool has direct access to the RAG engine — they interact through purpose-specific methods (`RAGSearch`, `IngestFile`, `RAGEnabled`) that handle nil-engine checks internally via the `ErrRAGNotInitialized` sentinel error.
 
 ## ProjectRoot Pattern
 

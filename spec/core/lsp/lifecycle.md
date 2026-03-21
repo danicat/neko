@@ -10,8 +10,8 @@ The `Manager` struct (`internal/lsp/manager.go`) acts as a registry and orchestr
    - Access to this map is protected by mutexes to support concurrent tool calls across different files.
 
 2. **Startup Trigger (`ClientFor`)**:
-   - When a language tool requires LSP capabilities, it calls `ClientFor(lang, command, args)`.
-   - If a client for that configuration is already running and healthy, it is reused.
+   - When a language tool requires LSP capabilities, it calls `ClientFor(ctx, lang, workspaceRoot, command, args, langID, options)`.
+   - If a client for that language/workspace combination is already running and healthy, it is reused.
    - If not, the Manager spawns a new process (e.g., `exec.Command("gopls")`), attaches the JSON-RPC streams, instantiates a new `Client`, and initiates the handshake sequence.
 
 3. **Graceful Shutdown (`CloseAll`)**:

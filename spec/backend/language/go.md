@@ -9,10 +9,11 @@ The Go language backend (`internal/backend/golang`) leverages the standard Go to
    - Matches if `go.mod` exists in the workspace.
 
 2. **LSP Binding**:
-   - `LSPCommand()` returns `gopls` with options for semantic tokens, hover, and staticcheck diagnostics.
+   - `LSPCommand()` returns `gopls` (no extra arguments). LSP initialization options (semantic tokens, hover, staticcheck diagnostics) are provided separately via `InitializationOptions()`.
 
 3. **Tool Setup** (`EnsureTools`):
    - On `open_project`, installs required tools into the project's `go.mod` via `go get -tool`:
+     - `golangci-lint` — linting
      - `selene` — mutation testing
      - `testquery` — test coverage SQL database
      - `modernize` — code modernization analysis

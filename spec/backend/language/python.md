@@ -9,7 +9,7 @@ The Python language backend (`internal/backend/python`) acts as an adapter for t
    - Checks for common markers like `requirements.txt`, `pyproject.toml`, or `setup.py`.
 
 2. **LSP Binding**:
-   - `LSPCommand()` attempts to spawn `pyright-langserver` via `npx` or standard binary paths.
+   - `LSPCommand()` returns `pylsp` (Python Language Server) invoked via `uv run pylsp`.
 
 3. **BuildPipeline**:
    - Since Python is interpreted, the "build" step is functionally a static analysis gate.

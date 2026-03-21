@@ -10,7 +10,7 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang"
-	"github.com/danicat/neko/internal/core/rag"
+	"github.com/danicat/neko/internal/lsp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -23,8 +23,12 @@ func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBa
 	return ts.reg.ForFile(path)
 }
 
-func (ts *testServer) RAG() *rag.Engine {
+func (ts *testServer) IngestFile(_ context.Context, _ string, _ string, _ []lsp.DocumentSymbol, _ []string) error {
 	return nil
+}
+
+func (ts *testServer) RAGEnabled() bool {
+	return false
 }
 
 func (ts *testServer) ProjectRoot() string {
