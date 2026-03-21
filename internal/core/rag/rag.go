@@ -16,9 +16,9 @@ import (
 
 // Engine manages the local vector database.
 type Engine struct {
-	db         *chromem.DB
-	collection *chromem.Collection
-	mu         sync.Mutex
+	db          *chromem.DB
+	collection  *chromem.Collection
+	mu          sync.Mutex
 	projectRoot string
 }
 
@@ -89,10 +89,7 @@ func (e *Engine) IngestFile(ctx context.Context, path string, content string, sy
 		// Fallback to line-based chunking
 		lines := strings.Split(content, "\n")
 		for i := 0; i < len(lines); i += 50 {
-			end := i + 50
-			if end > len(lines) {
-				end = len(lines)
-			}
+			end := min(i+50, len(lines))
 			chunk := strings.Join(lines[i:end], "\n")
 			docs = append(docs, chromem.Document{
 				ID:      fmt.Sprintf("%s:%d", path, i),

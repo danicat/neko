@@ -70,7 +70,7 @@ func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		path := res.Metadata["path"]
 		line := res.Metadata["line"]
 		name := res.Metadata["name"]
-		
+
 		symbolInfo := ""
 		if name != "" {
 			symbolInfo = fmt.Sprintf(" (Symbol: %s)", name)

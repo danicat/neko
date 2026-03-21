@@ -201,9 +201,15 @@ type ClientCapabilities struct {
 
 // TextDocumentClientCapabilities defines text document capabilities.
 type TextDocumentClientCapabilities struct {
-	Hover      *HoverClientCapabilities      `json:"hover,omitempty"`
-	Definition *DefinitionClientCapabilities `json:"definition,omitempty"`
-	Diagnostic any                           `json:"diagnostic,omitempty"`
+	Hover          *HoverClientCapabilities          `json:"hover,omitempty"`
+	Definition     *DefinitionClientCapabilities     `json:"definition,omitempty"`
+	DocumentSymbol *DocumentSymbolClientCapabilities `json:"documentSymbol,omitempty"`
+	Diagnostic     any                               `json:"diagnostic,omitempty"`
+}
+
+// DocumentSymbolClientCapabilities defines document symbol capabilities.
+type DocumentSymbolClientCapabilities struct {
+	HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport,omitempty"`
 }
 
 // HoverClientCapabilities defines hover-specific capabilities.

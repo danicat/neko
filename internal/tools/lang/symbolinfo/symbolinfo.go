@@ -63,14 +63,13 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil
 	}
 
-	hover, err := client.Hover(ctx, absPath, args.Line, args.Col)
+		hoverText, err := client.EnhancedHover(ctx, absPath, args.Line, args.Col)
 	if err != nil {
-		return errorResult(fmt.Sprintf("hover failed: %v", err)), nil, nil
+		return errorResult(fmt.Sprintf("describe failed: %v", err)), nil, nil
 	}
 
-	text := lsp.HoverText(hover)
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: text}},
+		Content: []mcp.Content{&mcp.TextContent{Text: hoverText}},
 	}, nil, nil
 }
 

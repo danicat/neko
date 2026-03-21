@@ -1,19 +1,22 @@
-# Task 10: Virtual Semantic Annotations
+# Task 10: Unified Semantic Engine & Type Info
 
 ## Context
-To provide "IDE-like" type awareness, Neko will inject virtual comments into `read_file` output. This reduces the number of turns an agent spends checking types.
+To provide deep type awareness without mutilating source code, Neko will append a "Type Info" footer to `read_file` output using an "Enhanced Describe Backend."
 
 ## TODO
-- [ ] Implement the annotation engine in the `read` tool.
-- [ ] Logic: `documentSymbol` -> Filter Symbols -> `hover` for types -> Inject `<NEKO>...</NEKO>` tags.
-- [ ] Follow "High-Signal Rules": skip built-in primitives, include struct definitions for user types, fully qualify cross-package symbols.
-- [ ] Implement the "Agent Alert" footer in the tool response.
+- [ ] Implement `lsp.EnhancedHover` or extend the `describe` tool logic to support depth-limited (+1) recursive resolution.
+- [ ] Implement method set extraction from the LSP response for structs/interfaces.
+- [ ] Implement the "Type Info" footer aggregator in `read_file`. It must:
+    - Determine symbols within the read line bounds.
+    - Fetch their Enhanced Describe data.
+    - Format them sequentially in the "Dense Log" format (`- Line X sym (*Type): Doc...`).
+- [ ] Clean up legacy code: remove all `<NEKO>` tag stripping logic from `shared/lines.go` and `edit_file/edit.go` since the footer approach guarantees pristine code blocks.
 
 ## NOT TODO
-- [ ] Do not use language-specific comment symbols (e.g. `//` or `#`); use the bare `<NEKO>` tag.
-- [ ] Do not annotate every local variable; focus on declarations and complex inferences.
+- [ ] Do not inject tags or banners inline with the source code.
+- [ ] Do not recurse more than 1 level deep when resolving types.
 
 ## Acceptance Criteria
-- [ ] `read_file` output contains clear type-signature metadata.
-- [ ] The agent can see the underlying definition of a user-defined type without calling `describe`.
-- [ ] Annotations are clearly visually distinct from source code.
+- [ ] `read_file` output ends with a structured `## Type Info` block.
+- [ ] Complex types show their extracted method sets.
+- [ ] The core source block perfectly matches the file on disk.t from source code.

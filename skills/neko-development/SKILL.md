@@ -11,7 +11,7 @@ This skill provides precise, language-aware workflows for using **Neko** as a Se
 
 1.  **Context**: Call `open_project(dir=".")` to initialize the semantic engine.
 2.  **Explore**: Use `semantic_search` to find patterns by *meaning* when keywords aren't enough.
-3.  **Intel**: Use `read_file` and look for `<NEKO>` tags for immediate type signatures. Use `describe` for deep contextual analysis.
+3.  **Intel**: Use `read_file` and consult the **Type Info** footer for immediate type signatures and struct fields. Use `describe` for deep contextual analysis.
 4.  **Action**: 
     - Use `rename_symbol` for all deterministic renames.
     - Use `multi_edit` for interdependent changes across files.
@@ -46,5 +46,5 @@ Python projects **must** use `uv` for all operations.
 ## Pro-Tips for Agents
 
 - **Semantic Momentum**: Use the diagnostic list returned by every edit to steer your next action. Do not wait for a full `build` if the LSP already shows regressions.
-- **Type Awareness**: Trust the `<NEKO>` tags in `read_file`. They are the compiler's view of the type system.
+- **Type Awareness**: Trust the **Type Info** footer in `read_file`. It provides the compiler's view of variable types, struct fields, and method sets.
 - **Atomic Batches**: Submit "Complete Thoughts" using `multi_edit` to keep the diagnostic list actionable.

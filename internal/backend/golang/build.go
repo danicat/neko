@@ -17,12 +17,12 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# Smart Build Report (`%s`)\n\n", pkgs))
+	fmt.Fprintf(&sb, "# Smart Build Report (`%s`)\n\n", pkgs)
 
 	// 1. Auto-Fix
 	if opts.AutoFix {
 		if err := runGoCmd(ctx, dir, "go", "mod", "tidy"); err != nil {
-			sb.WriteString(fmt.Sprintf("### ⚠️ Auto-Fix: `go mod tidy` Failed\n> %v\n\n", err))
+			fmt.Fprintf(&sb, "### ⚠️ Auto-Fix: `go mod tidy` Failed\n> %v\n\n", err)
 		}
 		_ = runGoCmd(ctx, dir, "gofmt", "-w", ".")
 	}
@@ -43,15 +43,17 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 		sb.WriteString("### 🚀 Modernize: ")
 		modOut, modErr := goModernize(ctx, dir, opts.AutoFix)
 		if modErr != nil {
-			sb.WriteString("⚠️ FAILED\n\n")
+			sb.WriteString("❌ FAILED\n\n")
 			sb.WriteString(goFormatOutput(modOut))
-		} else if strings.Contains(modOut, "No issues found") || modOut == "" {
-			sb.WriteString("✅ PASS\n\n")
+		} else if modOut == "" {
+			sb.WriteString("✅ PASS (No issues found)\n\n")
 		} else {
 			sb.WriteString("📝 ISSUES FOUND\n\n")
 			sb.WriteString(goFormatOutput(modOut))
 			if opts.AutoFix {
-				sb.WriteString("\n✅ Auto-fixed modernization issues.\n\n")
+				sb.WriteString("\n✅ Auto-fixed all modernization issues.\n\n")
+			} else {
+				sb.WriteString("\n⚠️ Fixes not applied (auto_fix disabled).\n\n")
 			}
 		}
 	}

@@ -27,7 +27,7 @@ func TestClient_Versioning(t *testing.T) {
 		t.Errorf("expected version 1, got %d", v)
 	}
 
-	// We'll trust the sequential logic in DidChange/DidSave for now 
+	// We'll trust the sequential logic in DidChange/DidSave for now
 	// as they rely on the same mutex-protected openedDocs map.
 }
 

@@ -91,7 +91,7 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				// We don't know exactly which files changed, so we trigger a generic workspace update
 				lspClient.DidChangeWatchedFiles(ctx, ".", 2) // 2: Changed
-				
+
 				// Pull diagnostics to include in the report
 				lspClient.PullDiagnostics(ctx)
 				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics())

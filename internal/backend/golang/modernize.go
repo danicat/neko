@@ -21,7 +21,7 @@ func goModernize(ctx context.Context, dir string, fix bool) (string, error) {
 	diagnostics = filterNoise(diagnostics)
 
 	if diagnostics == "" {
-		return "✅ No modernization issues found.", nil
+		return "", nil
 	}
 
 	if fix {
@@ -29,10 +29,11 @@ func goModernize(ctx context.Context, dir string, fix bool) (string, error) {
 		fixCmd.Dir = dir
 		fixOut, fixErr := fixCmd.CombinedOutput()
 		if fixErr != nil {
-			return fmt.Sprintf("⚠️ Modernization fix attempted but encountered errors:\n\n%s", string(fixOut)), nil
+			return string(fixOut), fmt.Errorf("modernization fix failed")
 		}
-		return fmt.Sprintf("⚠️ Found modernization opportunities:\n\n%s\n\n✅ Automatically applied modernization fixes.", diagnostics), nil
+		// Return the original diagnostics so the user knows what was fixed
+		return diagnostics, nil
 	}
 
-	return fmt.Sprintf("⚠️ Found modernization opportunities:\n\n%s", diagnostics), nil
+	return diagnostics, nil
 }

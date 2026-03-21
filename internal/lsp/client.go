@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -20,12 +21,12 @@ import (
 
 // Client is a minimal LSP client that communicates with a language server over stdio.
 type Client struct {
-	cmd      *exec.Cmd
-	stdin    io.WriteCloser
-	reader   *bufio.Reader
-	mu       sync.Mutex
-	nextID   atomic.Int64
-	pending  map[int64]chan *jsonrpcResponse
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	reader     *bufio.Reader
+	mu         sync.Mutex
+	nextID     atomic.Int64
+	pending    map[int64]chan *jsonrpcResponse
 	openedDocs map[string]int // URIs of opened documents → version
 
 	diagMu      sync.Mutex
@@ -375,9 +376,7 @@ func (c *Client) GetAllDiagnostics() map[string][]Diagnostic {
 	defer c.diagMu.Unlock()
 	// Return a copy
 	res := make(map[string][]Diagnostic)
-	for k, v := range c.diagnostics {
-		res[k] = v
-	}
+	maps.Copy(res, c.diagnostics)
 	return res
 }
 
@@ -411,8 +410,7 @@ func FormatDiagnostics(diagnostics map[string][]Diagnostic) string {
 			if d.Severity == 2 {
 				severity = "Warning"
 			}
-			sb.WriteString(fmt.Sprintf("- `%s:%d:%d`: [%s] %s\n",
-				path, d.Range.Start.Line+1, d.Range.Start.Character+1, severity, d.Message))
+			fmt.Fprintf(&sb, "- `%s:%d:%d`: [%s] %s\n", path, d.Range.Start.Line+1, d.Range.Start.Character+1, severity, d.Message)
 		}
 	}
 
@@ -420,7 +418,7 @@ func FormatDiagnostics(diagnostics map[string][]Diagnostic) string {
 		return "\n✅ **Project is clean!** No errors or warnings found."
 	}
 
-	sb.WriteString(fmt.Sprintf("\n*Total: %d issues found across %d files.*", total, len(filesWithIssues)))
+	fmt.Fprintf(&sb, "\n*Total: %d issues found across %d files.*", total, len(filesWithIssues))
 	return sb.String()
 }
 
@@ -683,7 +681,11 @@ func formatSymbolRecursive(sb *strings.Builder, symbols []DocumentSymbol, depth 
 		// 1: File, 2: Module, 3: Namespace, 4: Package, 5: Class, 6: Method, 7: Property, 8: Field, 9: Constructor, 10: Enum, 11: Interface, 12: Function, 13: Variable, 14: Constant, 15: String, 16: Number, 17: Boolean, 18: Array, 19: Object, 20: Key, 21: Null, 22: EnumMember, 23: Struct, 24: Event, 25: Operator, 26: TypeParameter
 		if s.Kind == 5 || s.Kind == 6 || s.Kind == 11 || s.Kind == 12 || s.Kind == 23 {
 			indent := strings.Repeat("  ", depth)
-			sb.WriteString(fmt.Sprintf("%s- %s (Lines %d-%d)\n", indent, s.Name, s.Range.Start.Line+1, s.Range.End.Line+1))
+			detail := ""
+			if s.Detail != "" {
+				detail = " " + s.Detail
+			}
+			fmt.Fprintf(sb, "%s- %s%s (Lines %d-%d)\n", indent, s.Name, detail, s.Range.Start.Line+1, s.Range.End.Line+1)
 			if len(s.Children) > 0 {
 				formatSymbolRecursive(sb, s.Children, depth+1)
 			}
@@ -696,11 +698,7 @@ func FormatLocations(locations []Location) string {
 	var sb strings.Builder
 	for _, loc := range locations {
 		path := URIToPath(loc.URI)
-		sb.WriteString(fmt.Sprintf("- %s:%d:%d\n",
-			path,
-			loc.Range.Start.Line+1,
-			loc.Range.Start.Character+1,
-		))
+		fmt.Fprintf(&sb, "- %s:%d:%d\n", path, loc.Range.Start.Line+1, loc.Range.Start.Character+1)
 	}
 	return sb.String()
 }
@@ -750,7 +748,7 @@ func (c *Client) EnrichLocations(ctx context.Context, locations []Location) stri
 
 // GetSymbolAt returns the name of the symbol containing the given position.
 func (c *Client) GetSymbolAt(ctx context.Context, file string, line, col int) (string, error) {
-	// Simple implementation: use hover to get symbol context if possible, 
+	// Simple implementation: use hover to get symbol context if possible,
 	// or we could use documentSymbol and find the range. Hover is often enough.
 	hover, err := c.Hover(ctx, file, line, col)
 	if err != nil {
@@ -787,6 +785,9 @@ func (c *Client) initialize(ctx context.Context) error {
 				},
 				Definition: &DefinitionClientCapabilities{
 					LinkSupport: true,
+				},
+				DocumentSymbol: &DocumentSymbolClientCapabilities{
+					HierarchicalDocumentSymbolSupport: true,
 				},
 				Diagnostic: &struct{}{},
 			},
@@ -1035,4 +1036,41 @@ func detectLanguageID(path string) string {
 	default:
 		return ""
 	}
+}
+
+// EnhancedHover performs a hover, and if the result is a simple variable declaration,
+// it attempts to jump to the definition of that variable's type to fetch the full struct/interface
+// documentation and method set. It returns the combined markdown.
+func (c *Client) EnhancedHover(ctx context.Context, file string, line, col int) (string, error) {
+	hover, err := c.Hover(ctx, file, line, col)
+	if err != nil {
+		return "", err
+	}
+
+	text := HoverText(hover)
+
+	// If the hover is a simple variable or function signature, try to find the definition
+	// to get richer type/struct information.
+	if len(text) < 200 {
+		locs, defErr := c.Definition(ctx, file, line, col)
+		if defErr == nil && len(locs) > 0 {
+			defLoc := locs[0]
+			defPath := URIToPath(defLoc.URI)
+			
+			// Only jump if it's a different location or if we are forced to (depth 1)
+			defHover, hErr := c.Hover(ctx, defPath, defLoc.Range.Start.Line+1, defLoc.Range.Start.Character+1)
+			if hErr == nil {
+				defText := HoverText(defHover)
+				if len(defText) > len(text) {
+					// Prepend the original signature if it's a variable
+					if strings.HasPrefix(text, "```go\nvar") {
+						return text + "\n\n" + defText, nil
+					}
+					return defText, nil
+				}
+			}
+		}
+	}
+
+	return text, nil
 }

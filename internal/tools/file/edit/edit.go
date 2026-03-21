@@ -168,9 +168,8 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 	args.OldContent = shared.StripNekoTags(args.OldContent)
 	args.NewContent = shared.StripNekoTags(args.NewContent)
 
-	if args.Threshold == 0 {
-		args.Threshold = 0.95
-	}
+	// Threshold is hardcoded for safety
+	args.Threshold = 0.95
 
 	content, err := os.ReadFile(args.File)
 	if err != nil {

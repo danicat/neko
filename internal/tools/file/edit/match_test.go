@@ -100,7 +100,7 @@ func TestFindBestMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := findMatches(tt.content, tt.search)
-			
+
 			var score float64
 			var start, end int
 			if len(matches) > 0 {
