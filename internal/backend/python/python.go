@@ -216,3 +216,7 @@ func (b *Backend) BuildTestDB(ctx context.Context, dir string, pkg string) error
 func (b *Backend) QueryTestDB(ctx context.Context, dir string, query string) (string, error) {
 	return "", fmt.Errorf("SQL test querying is not yet supported for Python projects. Test data is collected via pytest JSON reports")
 }
+
+func (b *Backend) IsStdLibURI(uri string) bool {
+	return strings.Contains(uri, "/lib/python") && !strings.Contains(uri, "site-packages")
+}

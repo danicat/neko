@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/danicat/neko/internal/backend"
@@ -21,6 +22,7 @@ import (
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
 	ShouldShowDoc(language, pkg string) bool
+	HasSeenTypeInfo(name string) bool
 	RAG() *rag.Engine
 }
 
@@ -151,10 +153,27 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	var typeInfoEntries []string
 	seenTypes := make(map[string]bool)
 
-	var symbols []lsp.DocumentSymbol
-	if lspClient != nil {
-		allSymbols, _ := lspClient.DocumentSymbol(ctx, absPath)
-		symbols = findSymbolsInRange(allSymbols, startLine, startLine+len(lines)-1)
+	// Build the line-by-line view and collect identifiers for Type Info
+	var idents []struct {
+		name string
+		line int
+		col  int
+	}
+	// Simple identifier regex
+	re := regexp.MustCompile(`\b[a-zA-Z_][a-zA-Z0-9_]*\b`)
+	// Keywords to skip
+	keywords := map[string]bool{
+		"func": true, "var": true, "type": true, "struct": true, "interface": true,
+		"package": true, "import": true, "return": true, "if": true, "else": true,
+		"for": true, "range": true, "go": true, "select": true, "case": true,
+		"default": true, "switch": true, "defer": true, "map": true, "chan": true,
+		"nil": true, "true": true, "false": true, "err": true, "error": true,
+		"string": true, "int": true, "bool": true, "ctx": true, "context": true,
+		"float32": true, "float64": true, "byte": true, "rune": true, "uint": true,
+		"int64": true, "uint64": true, "int32": true, "uint32": true,
+		"make": true, "new": true, "len": true, "cap": true, "append": true, "copy": true,
+		"delete": true, "close": true, "panic": true, "recover": true, "complex": true,
+		"real": true, "imag": true, "print": true, "println": true,
 	}
 
 	for i, line := range lines {
@@ -162,18 +181,49 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		fmt.Fprintf(&contentWithLines, "%4d | %s\n", lineNum, line)
 
 		if lspClient != nil {
-			for _, s := range symbols {
-				if s.Range.Start.Line+1 == lineNum {
-					// 12=Function, 6=Method, 13=Variable, 5=Class, 11=Interface
-					if s.Kind == 12 || s.Kind == 6 || s.Kind == 13 || s.Kind == 5 || s.Kind == 11 {
-						text, err := lspClient.EnhancedHover(ctx, absPath, lineNum, s.Range.Start.Character+1)
-						if err == nil && text != "" && !seenTypes[s.Name] {
-							seenTypes[s.Name] = true
-							formattedInfo := formatTypeInfo(lineNum, s.Name, text)
-							if formattedInfo != "" {
-								typeInfoEntries = append(typeInfoEntries, formattedInfo)
-							}
-						}
+			matches := re.FindAllStringIndex(line, -1)
+			for _, m := range matches {
+				name := line[m[0]:m[1]]
+				if !keywords[name] {
+					idents = append(idents, struct {
+						name string
+						line int
+						col  int
+					}{name, lineNum, m[0] + 1})
+				}
+			}
+		}
+	}
+
+	// Resolve identifiers using LSP
+	if lspClient != nil {
+		for _, id := range idents {
+			if s.HasSeenTypeInfo(id.name) {
+				continue
+			}
+
+			// 1. Check if it's external
+			locs, err := lspClient.Definition(ctx, absPath, id.line, id.col)
+			isExternal := false
+			isStdLib := false
+			if err == nil && len(locs) > 0 {
+				for _, loc := range locs {
+					if !strings.HasSuffix(loc.URI, filepath.Base(absPath)) {
+						isExternal = true
+					}
+					if be.IsStdLibURI(loc.URI) {
+						isStdLib = true
+					}
+				}
+			}
+
+			if isExternal && !isStdLib {
+				text, err := lspClient.EnhancedHover(ctx, absPath, id.line, id.col)
+				if err == nil && text != "" {
+					seenTypes[id.name] = true
+					formattedInfo := formatTypeInfo(id.line, id.name, text)
+					if formattedInfo != "" {
+						typeInfoEntries = append(typeInfoEntries, formattedInfo)
 					}
 				}
 			}
@@ -313,14 +363,38 @@ func formatTypeInfo(lineNum int, name string, hoverText string) string {
 			continue
 		}
 
-		if strings.HasPrefix(cl, "func (") {
-			methods = append(methods, cl)
+		// Strip trailing comments for cleaner parsing (e.g. gopls // size=40)
+		if idx := strings.Index(cl, "//"); idx != -1 {
+			cl = strings.TrimSpace(cl[:idx])
+		}
+
+		if strings.HasPrefix(cl, "func ") {
+			if !strings.HasPrefix(cl, "func (") {
+				// Top-level function: extract return type
+				idx := strings.LastIndex(cl, ")")
+				if idx != -1 && idx < len(cl)-1 {
+					retType := strings.TrimSpace(cl[idx+1:])
+					if !strings.HasPrefix(retType, "{") && retType != "" {
+						baseType = retType
+					} else {
+						baseType = "func"
+					}
+				} else {
+					baseType = "func"
+				}
+			} else {
+				methods = append(methods, cl)
+			}
 			continue
 		}
 
-		if strings.HasPrefix(cl, "type ") && strings.HasSuffix(cl, "{") {
+		if strings.HasPrefix(cl, "type ") {
+			// type Name struct or type Name interface
+			cl = strings.TrimSuffix(cl, "{")
 			parts := strings.Fields(cl)
-			if len(parts) >= 2 {
+			if len(parts) >= 3 {
+				baseType = parts[2]
+			} else if len(parts) >= 2 {
 				baseType = parts[1]
 			}
 			inStruct = true
@@ -335,20 +409,15 @@ func formatTypeInfo(lineNum int, name string, hoverText string) string {
 			// It's a field
 			parts := strings.Fields(cl)
 			if len(parts) >= 1 {
-				// Don't add JSON tags to the dense log
-				fieldName := parts[0]
-				fields = append(fields, fieldName)
+				fields = append(fields, parts[0])
 			}
 			continue
 		}
 
-		if strings.HasPrefix(cl, "var ") || strings.HasPrefix(cl, "func ") {
-			// e.g. "var db *chromem.DB"
+		if strings.HasPrefix(cl, "var ") || strings.HasPrefix(cl, "field ") || strings.HasPrefix(cl, "const ") {
 			parts := strings.Fields(cl)
-			if len(parts) >= 3 && parts[0] == "var" {
+			if len(parts) >= 3 {
 				baseType = strings.Join(parts[2:], " ")
-			} else if baseType == "" {
-				baseType = cl
 			}
 		}
 	}
@@ -360,6 +429,7 @@ func formatTypeInfo(lineNum int, name string, hoverText string) string {
 	doc := ""
 	if len(docLines) > 0 {
 		doc = docLines[0]
+		doc = strings.ReplaceAll(doc, "\\_", "_")
 	}
 
 	var sb strings.Builder
@@ -369,46 +439,26 @@ func formatTypeInfo(lineNum int, name string, hoverText string) string {
 	}
 
 	if len(fields) > 0 {
-		// Limit to 5 fields to keep it dense
-		displayFields := fields
-		if len(displayFields) > 5 {
-			displayFields = displayFields[:5]
-			displayFields = append(displayFields, "...")
-		}
-		fmt.Fprintf(&sb, "\n  Fields: %s", strings.Join(displayFields, ", "))
+		fmt.Fprintf(&sb, "\n  Fields: %s", strings.Join(fields, ", "))
 	}
 
 	if len(methods) > 0 {
-		// Clean up method signatures for dense log
-		var cleanMethods []string
-		for _, m := range methods {
-			cleanMethods = append(cleanMethods, m)
-		}
-		if len(cleanMethods) > 3 {
-			cleanMethods = cleanMethods[:3]
-			cleanMethods = append(cleanMethods, "...")
-		}
+		cleanMethods := make([]string, 0, len(methods))
+		cleanMethods = append(cleanMethods, methods...)
 		fmt.Fprintf(&sb, "\n  Methods: %s", strings.Join(cleanMethods, ", "))
 	}
 
-	return sb.String()
-}
-
-func findSymbolsInRange(symbols []lsp.DocumentSymbol, start, end int) []lsp.DocumentSymbol {
-	var res []lsp.DocumentSymbol
-	for _, s := range symbols {
-		sLine := s.Range.Start.Line + 1
-		eLine := s.Range.End.Line + 1
-
-		// If symbol is within range, or contains the range
-		if (sLine >= start && sLine <= end) || (eLine >= start && eLine <= end) || (sLine <= start && eLine >= end) {
-			res = append(res, s)
-		}
-
-		// Recurse into children
-		if len(s.Children) > 0 {
-			res = append(res, findSymbolsInRange(s.Children, start, end)...)
-		}
+	// Filter out low-value entries (like raw functions or unknown types without methods/fields)
+	if baseType == "func" && len(methods) == 0 && len(fields) == 0 {
+		return ""
 	}
-	return res
+	if baseType == "unknown" && len(methods) == 0 && len(fields) == 0 {
+		return ""
+	}
+	// Also skip basic standard library packages
+	if strings.HasPrefix(doc, "Package ") {
+		return ""
+	}
+
+		return sb.String()
 }

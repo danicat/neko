@@ -94,7 +94,8 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 
 				// Pull diagnostics to include in the report
 				lspClient.PullDiagnostics(ctx)
-				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics())
+				workspaceRoot, _ := roots.Global.Validate(".")
+				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot)
 			}
 		}
 	}

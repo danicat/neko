@@ -68,6 +68,7 @@ func NewBackend(p *Plugin) *PluginBackend {
 
 func (b *PluginBackend) Name() string             { return b.plugin.Name }
 func (b *PluginBackend) FileExtensions() []string { return b.plugin.Extensions }
+
 func (b *PluginBackend) ProjectMarkers() []string { return b.plugin.ProjectMarkers }
 func (b *PluginBackend) SkipDirs() []string       { return b.plugin.SkipDirs }
 func (b *PluginBackend) Tier() int                { return b.plugin.Tier }
@@ -360,4 +361,8 @@ func loadPlugin(path string) (*Plugin, error) {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	return &p, nil
+}
+
+func (b *PluginBackend) IsStdLibURI(uri string) bool {
+	return false // Plugins don't have a reliable way to check stdlib yet
 }

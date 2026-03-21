@@ -50,6 +50,7 @@ type Server struct {
 	ragEngine      *rag.Engine
 	activeBackends map[string]backend.LanguageBackend // keyed by Name()
 	seenDocs       map[string]map[string]bool
+	seenTypeInfo   map[string]bool // Session-level memoization for Type Info
 }
 
 // New creates a new Server instance with the given registry and config.
@@ -60,6 +61,7 @@ func New(cfg *config.Config, version string, reg *backend.Registry) *Server {
 		registeredTools: make(map[string]bool),
 		activeBackends:  make(map[string]backend.LanguageBackend),
 		seenDocs:        make(map[string]map[string]bool),
+		seenTypeInfo:    make(map[string]bool),
 	}
 
 	mcpServer := mcp.NewServer(&mcp.Implementation{
@@ -459,4 +461,19 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 
 		Content: []mcp.Content{&mcp.TextContent{Text: "Project closed. Returned to lobby."}},
 	}, nil, nil
+}
+
+// HasSeenTypeInfo returns true if the type info has already been shown in this session.
+// If it hasn't, it marks it as seen and returns false.
+func (s *Server) HasSeenTypeInfo(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seenTypeInfo == nil {
+		s.seenTypeInfo = make(map[string]bool)
+	}
+	if s.seenTypeInfo[name] {
+		return true
+	}
+	s.seenTypeInfo[name] = true
+	return false
 }

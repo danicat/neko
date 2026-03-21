@@ -9,12 +9,33 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/backend/golang/godoc"
 	"golang.org/x/tools/imports"
 )
+
+var (
+	goRoot       string
+	goModCache   string
+	goEnvFetched sync.Once
+)
+
+func fetchGoEnv() {
+	goEnvFetched.Do(func() {
+		out, err := exec.Command("go", "env", "GOROOT", "GOMODCACHE").Output()
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+			if len(lines) >= 2 {
+				goRoot = strings.TrimSpace(lines[0])
+				goModCache = strings.TrimSpace(lines[1])
+			}
+		}
+	})
+}
 
 // Backend implements backend.LanguageBackend for Go.
 type Backend struct{}
@@ -179,4 +200,30 @@ func (b *Backend) BuildTestDB(ctx context.Context, dir string, pkg string) error
 
 func (b *Backend) QueryTestDB(ctx context.Context, dir string, query string) (string, error) {
 	return goQueryTestDB(ctx, dir, query)
+}
+
+func (b *Backend) IsStdLibURI(uri string) bool {
+	fetchGoEnv()
+
+	// Convert URI to path for easier comparison
+	path := strings.TrimPrefix(uri, "file://")
+
+	// Standard library check
+	if goRoot != "" && strings.HasPrefix(path, goRoot) {
+		return true
+	}
+
+	// Also check if it's explicitly inside the module cache (it's external, not stdlib)
+	if goModCache != "" && strings.HasPrefix(path, goModCache) {
+		return false
+	}
+
+	// Fallback heuristic if `go env` failed or is empty
+	if goRoot == "" && (strings.Contains(uri, "/go/src/") || strings.Contains(uri, "/usr/local/go") || strings.Contains(uri, "/opt/homebrew/Cellar/go") || strings.Contains(uri, "/libexec/src")) {
+		if !strings.Contains(uri, "pkg/mod/") && !strings.Contains(uri, "/vendor/") {
+			return true
+		}
+	}
+
+	return false
 }

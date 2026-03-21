@@ -101,7 +101,8 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 
 	// Pull final health
 	allDiags := client.GetAllDiagnostics()
-	resSb.WriteString(lsp.FormatDiagnostics(allDiags))
+	workspaceRoot, _ = roots.Global.Validate(".")
+	resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},

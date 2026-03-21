@@ -45,6 +45,8 @@ func (b *noLSPBackend) Validate(ctx context.Context, file string) error {
 
 func (b *noLSPBackend) Name() string { return "nolsp" }
 
+func (b *noLSPBackend) IsStdLibURI(uri string) bool { return false }
+
 func TestEdit(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "edit-test-*")
 	if err != nil {

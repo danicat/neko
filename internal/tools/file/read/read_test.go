@@ -27,6 +27,10 @@ func (ts *testServer) RAG() *rag.Engine {
 	return nil
 }
 
+func (ts *testServer) HasSeenTypeInfo(name string) bool {
+	return false
+}
+
 func (ts *testServer) ShouldShowDoc(lang, pkg string) bool {
 	if ts.seenDocs == nil {
 		ts.seenDocs = make(map[string]map[string]bool)

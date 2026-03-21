@@ -425,22 +425,22 @@ func bufferCode(fset *token.FileSet, node any) string {
 func Render(d *Doc) string {
 	var buf strings.Builder
 
-	buf.WriteString(fmt.Sprintf("# %s\n\n", d.ImportPath))
+	fmt.Fprintf(&buf, "# %s\n\n", d.ImportPath)
 
 	if d.ResolvedPath != "" {
 		if strings.HasPrefix(d.ResolvedPath, d.ImportPath) {
-			buf.WriteString(fmt.Sprintf("> ℹ️ **Note:** Could not find `%s`. Showing documentation for parent module `%s` instead.\n\n", d.ResolvedPath, d.ImportPath))
+			fmt.Fprintf(&buf, "> ℹ️ **Note:** Could not find `%s`. Showing documentation for parent module `%s` instead.\n\n", d.ResolvedPath, d.ImportPath)
 		} else {
-			buf.WriteString(fmt.Sprintf("> **Note:** Redirected from %s\n\n", d.ResolvedPath))
+			fmt.Fprintf(&buf, "> **Note:** Redirected from %s\n\n", d.ResolvedPath)
 		}
 	}
 
 	if d.SymbolName != "" {
-		buf.WriteString(fmt.Sprintf("## %s %s\n\n", d.Type, d.SymbolName))
+		fmt.Fprintf(&buf, "## %s %s\n\n", d.Type, d.SymbolName)
 	}
 
 	if d.SourcePath != "" {
-		buf.WriteString(fmt.Sprintf("Defined in: `%s:%d`\n\n", d.SourcePath, d.Line))
+		fmt.Fprintf(&buf, "Defined in: `%s:%d`\n\n", d.SourcePath, d.Line)
 	}
 
 	if d.Definition != "" {
@@ -459,7 +459,7 @@ func Render(d *Doc) string {
 			if name == "" {
 				name = "Package Example"
 			}
-			buf.WriteString(fmt.Sprintf("#### %s\n\n", name))
+						fmt.Fprintf(&buf, "#### %s\n\n", name)
 			buf.WriteString("```go\n")
 			buf.WriteString(ex.Code)
 			buf.WriteString("\n```\n")
@@ -514,7 +514,7 @@ func Render(d *Doc) string {
 	if len(d.References) > 0 {
 		buf.WriteString("### Usages\n\n")
 		for _, ref := range d.References {
-			buf.WriteString(fmt.Sprintf("- %s\n", ref))
+			fmt.Fprintf(&buf, "- %s\n", ref)
 		}
 		buf.WriteString("\n")
 	}
@@ -522,12 +522,12 @@ func Render(d *Doc) string {
 	if len(d.SubPackages) > 0 {
 		buf.WriteString("### Sub-packages\n\n")
 		for _, sub := range d.SubPackages {
-			buf.WriteString(fmt.Sprintf("- %s\n", sub))
+			fmt.Fprintf(&buf, "- %s\n", sub)
 		}
 		buf.WriteString("\n")
 	}
 
-	buf.WriteString(fmt.Sprintf("[View on pkg.go.dev](%s)\n", d.PkgGoDevURL))
+	fmt.Fprintf(&buf, "[View on pkg.go.dev](%s)\n", d.PkgGoDevURL)
 	return buf.String()
 }
 

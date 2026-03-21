@@ -16,6 +16,7 @@ import (
 // Server defines the interface required by the tool.
 type Server interface {
 	ForFile(ctx context.Context, path string) backend.LanguageBackend
+	HasSeenTypeInfo(name string) bool
 }
 
 // Register registers the describe tool with the server.
@@ -63,7 +64,7 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil
 	}
 
-		hoverText, err := client.EnhancedHover(ctx, absPath, args.Line, args.Col)
+	hoverText, err := client.EnhancedHover(ctx, absPath, args.Line, args.Col)
 	if err != nil {
 		return errorResult(fmt.Sprintf("describe failed: %v", err)), nil, nil
 	}

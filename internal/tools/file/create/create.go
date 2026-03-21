@@ -130,7 +130,8 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 
 	if lspClient != nil {
 		allDiags := lspClient.GetAllDiagnostics()
-		resSb.WriteString(lsp.FormatDiagnostics(allDiags))
+		workspaceRoot, _ := roots.Global.Validate(".")
+		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 	} else {
 		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")
 		if warning != "" {

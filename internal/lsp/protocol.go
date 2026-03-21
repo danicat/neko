@@ -205,6 +205,20 @@ type TextDocumentClientCapabilities struct {
 	Definition     *DefinitionClientCapabilities     `json:"definition,omitempty"`
 	DocumentSymbol *DocumentSymbolClientCapabilities `json:"documentSymbol,omitempty"`
 	Diagnostic     any                               `json:"diagnostic,omitempty"`
+	SemanticTokens *SemanticTokensClientCapabilities `json:"semanticTokens,omitempty"`
+}
+
+// SemanticTokensClientCapabilities defines semantic tokens capabilities.
+type SemanticTokensClientCapabilities struct {
+	Requests       SemanticTokensRequests `json:"requests"`
+	Formats        []string               `json:"formats"`
+	TokenTypes     []string               `json:"tokenTypes"`
+	TokenModifiers []string               `json:"tokenModifiers"`
+}
+
+type SemanticTokensRequests struct {
+	Range bool `json:"range,omitempty"`
+	Full  bool `json:"full,omitempty"`
 }
 
 // DocumentSymbolClientCapabilities defines document symbol capabilities.
@@ -304,4 +318,15 @@ type jsonrpcResponse struct {
 type jsonrpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// SemanticTokensParams for textDocument/semanticTokens/full
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// SemanticTokens represents the result of a semanticTokens request
+type SemanticTokens struct {
+	ResultId string `json:"resultId,omitempty"`
+	Data     []int  `json:"data"`
 }

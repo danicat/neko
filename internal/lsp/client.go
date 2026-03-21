@@ -380,8 +380,9 @@ func (c *Client) GetAllDiagnostics() map[string][]Diagnostic {
 	return res
 }
 
-// FormatDiagnostics formats a map of diagnostics into a standardized Markdown report.
-func FormatDiagnostics(diagnostics map[string][]Diagnostic) string {
+// FormatDiagnostics formats a map of diagnostics into a standardized Markdown report,
+// filtering out any diagnostics that do not belong to the current workspace root.
+func FormatDiagnostics(diagnostics map[string][]Diagnostic, workspaceRoot string) string {
 	var sb strings.Builder
 	total := 0
 	filesWithIssues := make(map[string]bool)
@@ -402,6 +403,18 @@ func FormatDiagnostics(diagnostics map[string][]Diagnostic) string {
 		}
 
 		path := URIToPath(uri)
+
+				// Filter out dependencies / stdlib
+		// 1. Must be within the workspace root
+		if !strings.HasPrefix(path, workspaceRoot) {
+			continue
+		}
+
+		// 2. Explicitly filter out common vendor directories
+		if strings.Contains(path, "/vendor/") || strings.Contains(path, "\\vendor\\") {
+			continue
+		}
+
 		filesWithIssues[path] = true
 
 		for _, d := range diags {
@@ -790,6 +803,21 @@ func (c *Client) initialize(ctx context.Context) error {
 					HierarchicalDocumentSymbolSupport: true,
 				},
 				Diagnostic: &struct{}{},
+				SemanticTokens: &SemanticTokensClientCapabilities{
+					Requests: SemanticTokensRequests{
+						Full: true,
+					},
+					Formats: []string{"relative"},
+					TokenTypes: []string{
+						"namespace", "type", "class", "enum", "interface", "struct", "typeParameter",
+						"parameter", "variable", "property", "enumMember", "event", "function", "method",
+						"macro", "keyword", "modifier", "comment", "string", "number", "regexp", "operator",
+					},
+					TokenModifiers: []string{
+						"declaration", "definition", "readonly", "static", "deprecated", "abstract",
+						"async", "modification", "documentation", "defaultLibrary",
+					},
+				},
 			},
 		},
 		InitializationOptions: c.options,
@@ -1042,6 +1070,7 @@ func detectLanguageID(path string) string {
 // it attempts to jump to the definition of that variable's type to fetch the full struct/interface
 // documentation and method set. It returns the combined markdown.
 func (c *Client) EnhancedHover(ctx context.Context, file string, line, col int) (string, error) {
+
 	hover, err := c.Hover(ctx, file, line, col)
 	if err != nil {
 		return "", err
@@ -1056,7 +1085,6 @@ func (c *Client) EnhancedHover(ctx context.Context, file string, line, col int) 
 		if defErr == nil && len(locs) > 0 {
 			defLoc := locs[0]
 			defPath := URIToPath(defLoc.URI)
-			
 			// Only jump if it's a different location or if we are forced to (depth 1)
 			defHover, hErr := c.Hover(ctx, defPath, defLoc.Range.Start.Line+1, defLoc.Range.Start.Character+1)
 			if hErr == nil {
@@ -1073,4 +1101,31 @@ func (c *Client) EnhancedHover(ctx context.Context, file string, line, col int) 
 	}
 
 	return text, nil
+}
+
+// SemanticTokens requests semantic tokens for a document.
+func (c *Client) SemanticTokens(ctx context.Context, file string) (*SemanticTokens, error) {
+	uri, err := c.ensureOpen(ctx, file)
+	if err != nil {
+		return nil, err
+	}
+
+	params := SemanticTokensParams{
+		TextDocument: TextDocumentIdentifier{URI: uri},
+	}
+
+	result, err := c.call(ctx, "textDocument/semanticTokens/full", params)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || string(result) == "null" {
+		return nil, nil
+	}
+
+	var tokens SemanticTokens
+	if err := json.Unmarshal(result, &tokens); err != nil {
+		return nil, fmt.Errorf("failed to parse semantic tokens: %w", err)
+	}
+
+	return &tokens, nil
 }

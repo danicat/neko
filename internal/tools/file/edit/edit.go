@@ -90,7 +90,8 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	if lspClient != nil {
 		lspClient.WaitForDiagnostics(ctx, args.File)
 		allDiags := lspClient.GetAllDiagnostics()
-		resSb.WriteString(lsp.FormatDiagnostics(allDiags))
+		workspaceRoot, _ := roots.Global.Validate(".")
+		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 		lspClient.DidClose(ctx, args.File)
 	} else {
 		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")
@@ -107,15 +108,15 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 	}
 
 	var resSb strings.Builder
-	resSb.WriteString("### 批量编辑报告 (Multi-Edit Report)\n")
+	resSb.WriteString("### Multi-Edit Report\n")
 
 	affectedBackends := make(map[string]backend.LanguageBackend)
 
-	for i, edit := range args.Edits {
-		resSb.WriteString(fmt.Sprintf("\n#### %d. %s\n", i+1, edit.File))
+		for i, edit := range args.Edits {
+		fmt.Fprintf(&resSb, "\n#### %d. %s\n", i+1, edit.File)
 		_, editSb, err := performEdit(ctx, edit, s)
 		if err != nil {
-			resSb.WriteString(fmt.Sprintf("❌ FAILED: %v\n", err))
+			fmt.Fprintf(&resSb, "❌ FAILED: %v\n", err)
 			continue
 		}
 		resSb.WriteString(editSb.String())
@@ -135,7 +136,8 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 				anyLSP = true
 				// We don't have a specific file to wait for, so we just pull current state
 				lspClient.PullDiagnostics(ctx)
-				resSb.WriteString(lsp.FormatDiagnostics(lspClient.GetAllDiagnostics()))
+				workspaceRoot, _ := roots.Global.Validate(".")
+				resSb.WriteString(lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot))
 
 				// Close all documents in this backend
 				for _, edit := range args.Edits {

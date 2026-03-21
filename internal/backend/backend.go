@@ -79,4 +79,5 @@ type LanguageBackend interface {
 	SkipDirs() []string
 	ProjectMarkers() []string
 	Tier() int
+	IsStdLibURI(uri string) bool
 }

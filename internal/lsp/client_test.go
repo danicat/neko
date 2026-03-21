@@ -33,7 +33,7 @@ func TestClient_Versioning(t *testing.T) {
 
 func TestFormatDiagnostics(t *testing.T) {
 	diags := map[string][]Diagnostic{
-		"file:///test.go": {
+		"file:///test/workspace/test.go": {
 			{
 				Range:    Range{Start: Position{Line: 9, Character: 5}},
 				Severity: 1,
@@ -42,7 +42,7 @@ func TestFormatDiagnostics(t *testing.T) {
 		},
 	}
 
-	report := FormatDiagnostics(diags)
+	report := FormatDiagnostics(diags, "/test/workspace")
 	if !contains(report, "test.go:10:6") {
 		t.Errorf("expected line:col 10:6 in report, got: %s", report)
 	}

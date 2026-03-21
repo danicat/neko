@@ -44,6 +44,8 @@ func (b *noLSPBackend) Validate(ctx context.Context, file string) error {
 
 func (b *noLSPBackend) Name() string { return "nolsp" }
 
+func (b *noLSPBackend) IsStdLibURI(uri string) bool { return false }
+
 func TestCreate(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "create-test-*")
 	if err != nil {
