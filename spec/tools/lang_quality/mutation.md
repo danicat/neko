@@ -9,9 +9,9 @@ The `test_mutations` tool (`internal/tools/lang/mutation/mutation.go`) measures 
    - Calls `LanguageBackend.MutationTest`.
 
 2. **Backend Execution**:
-   - The backend runs a mutation testing framework (e.g., `go-mutesting` for Go).
-   - It introduces subtle logical bugs into the AST (e.g., changing `<` to `>`, or `==` to `!=`).
-   - It runs the test suite against each mutation.
+   - For Go, the backend uses **Selene** (`github.com/danicat/selene`) via `go run`.
+   - Selene introduces subtle logical mutations into the AST (e.g., changing `<` to `>`, or `==` to `!=`) and runs the test suite against each mutation.
+   - Build noise and unrelated output lines are filtered from the results.
 
 3. **Reporting**:
    - If the tests pass despite the code being broken, the mutation "survived."

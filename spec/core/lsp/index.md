@@ -5,3 +5,4 @@ The `internal/lsp` package provides generic Language Server Protocol client capa
 ## Sub-Components
 - [Client Implementation](client.md): Details the JSON-RPC communication, virtual file system management, and specific LSP request wrappers.
 - [Manager Lifecycle](lifecycle.md): Explains how the singleton manager tracks, starts, and stops multiple LSP instances concurrently.
+- [Unified Semantic Engine](semantic.md): Documents the type info resolution system used by `read_file` and `describe`, including `EnhancedHover` and session-level deduplication.

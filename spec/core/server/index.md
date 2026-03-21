@@ -5,3 +5,4 @@ The `internal/server` package orchestrates the Model Context Protocol (MCP) serv
 ## Sub-Components
 - [Initialization & State Management](state.md): Details the startup sequence and the Lobby vs. Open project phase logic.
 - [Tool Registration & Handler Mapping](tools.md): Explains how MCP tool requests are routed to specific internal Go functions.
+- [Server Interfaces & Conventions](interfaces.md): Documents the per-tool Server interface pattern, `ProjectRoot()`, `toolnames.Registry`, root validation, and capability-based registration.

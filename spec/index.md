@@ -20,7 +20,8 @@ Welcome to the comprehensive specification of the Neko project. This documentati
 
 ## Language Tools
 - [Symbol Rename Tool (`rename_symbol`)](tools/lang_rename/index.md)
-- [Definition, References & Symbol Info](tools/lang_navigation/index.md)
+- [Navigation: Definition & Symbol Info](tools/lang_navigation/index.md)
+- [Find References (`find_references`)](tools/lang_references/index.md)
 - [Semantic Search (`search`)](tools/lang_search/index.md)
 - [Quality Gate (`build` / `testquery` / `mutation`)](tools/lang_quality/index.md)
 - [Code Review (`codereview`)](tools/lang_review/index.md)
