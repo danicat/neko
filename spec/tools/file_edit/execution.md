@@ -1,22 +1,28 @@
 # Execution & Validation
 
 ## Overview
-The true power of `edit_file` lies not just in changing text, but in its synchronous connection to the Language Server Protocol. It acts as an immediate Quality Gate.
+The true power of `edit_file` lies not just in changing text, but in its synchronous connection to the Language Server Protocol and the RAG engine. It acts as an immediate Quality Gate.
 
 ## Implementation Steps
 
 1. **In-Memory Modification (`performEdit`)**:
-   - Once a unique match is found, Neko splices `new_content` into the file's buffer in memory. It does *not* write to disk immediately.
+   - Once a unique match is found via fuzzy matching, Neko splices `new_content` into the file's buffer in memory.
 
-2. **LSP Synchronization (`didChange`)**:
-   - The updated in-memory buffer is sent to the running LSP client via a `textDocument/didChange` notification.
-   - This forces the language server (e.g., `gopls`) to recompile its internal AST and type-check the modified code.
+2. **LSP Code Actions (Auto-Fixing)**:
+   - **Organize Imports**: Neko sends an `OrganizeImports` request to the LSP. If the edit introduced a new dependency or orphaned an old one, the LSP automatically adds or removes the import declaration.
+   - **Formatting**: Neko sends a `textDocument/formatting` request. The LSP applies language-specific formatting rules (e.g., `gofmt`) to ensure the spliced code matches project conventions.
 
-3. **Synchronous Diagnostics Capture**:
-   - Neko blocks and waits for a brief window to receive `textDocument/publishDiagnostics` events from the LSP.
-   - This returns an array of syntax errors, type mismatches, or lint warnings that were introduced by the edit.
+3. **Commit to Disk**:
+   - The formatted, import-adjusted content is written to disk.
 
-4. **Commit & Return**:
-   - The file is written to disk.
-   - Neko formats the raw diagnostics into a human-readable markdown report and returns it in the MCP tool result.
-   - If the edit caused an error (e.g., "undefined variable"), the LLM sees it *immediately* in the same turn, allowing it to fix the mistake without needing to run a separate build command. This is known as Neko's "Full Disclosure" principle.
+4. **Synchronous RAG Re-Indexing**:
+   - Neko immediately ingests the updated file into the local RAG vector database (`engine.IngestFile`).
+   - It enriches this ingestion with document symbols (from the LSP) and import paths (from the backend), ensuring that subsequent semantic searches immediately reflect the new code structure.
+
+5. **LSP Synchronization (`didSave`)**:
+   - A `textDocument/didSave` notification is sent to the LSP to trigger its internal re-indexing and validation.
+
+6. **Diagnostics Capture**:
+   - If an LSP is active, Neko blocks briefly to capture synchronous diagnostics (`textDocument/publishDiagnostics`).
+   - If no LSP is active, it falls back to the backend's manual `Validate()` routine.
+   - The tool returns a human-readable Markdown report of these diagnostics. If the edit caused a syntax error, the LLM sees it immediately in the same turn (the "Full Disclosure" principle).
