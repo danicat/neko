@@ -72,6 +72,9 @@ type LanguageBackend interface {
 	LSPCommand() (command string, args []string, ok bool)
 	InitializationOptions() map[string]any
 
+	// Setup
+	EnsureTools(ctx context.Context, dir string) error
+
 	// Metadata
 	LanguageID() string
 	Name() string

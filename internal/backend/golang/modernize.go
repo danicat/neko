@@ -7,9 +7,7 @@ import (
 )
 
 func goModernize(ctx context.Context, dir string, fix bool) (string, error) {
-	toolPath := "golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@latest"
-
-	checkCmd := exec.CommandContext(ctx, "go", "run", toolPath, "./...")
+	checkCmd := exec.CommandContext(ctx, "go", "tool", "modernize", "./...")
 	checkCmd.Dir = dir
 	checkOut, checkErr := checkCmd.CombinedOutput()
 	diagnostics := string(checkOut)
@@ -25,7 +23,7 @@ func goModernize(ctx context.Context, dir string, fix bool) (string, error) {
 	}
 
 	if fix {
-		fixCmd := exec.CommandContext(ctx, "go", "run", toolPath, "-fix", "./...")
+		fixCmd := exec.CommandContext(ctx, "go", "tool", "modernize", "-fix", "./...")
 		fixCmd.Dir = dir
 		fixOut, fixErr := fixCmd.CombinedOutput()
 		if fixErr != nil {

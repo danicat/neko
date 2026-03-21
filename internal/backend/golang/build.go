@@ -199,14 +199,7 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 	// 4. Lint
 	if opts.RunLint {
 		sb.WriteString("### 🧹 Lint: ")
-		lintCmd := "golangci-lint"
-		lintArgs := []string{"run", pkgs}
-		if _, err := exec.LookPath("golangci-lint"); err != nil {
-			lintCmd = "go"
-			lintArgs = []string{"vet", pkgs}
-			sb.WriteString("(using `go vet`) ")
-		}
-		lintOut, lintErr := runGoCmdOutput(ctx, dir, lintCmd, lintArgs...)
+		lintOut, lintErr := runGoCmdOutput(ctx, dir, "go", "tool", "golangci-lint", "run", pkgs)
 		if lintErr != nil {
 			sb.WriteString("⚠️ ISSUES FOUND\n\n")
 			sb.WriteString(goFormatOutput(lintOut))

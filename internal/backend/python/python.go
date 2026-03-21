@@ -54,6 +54,10 @@ func (b *Backend) SkipDirs() []string {
 	return []string{"__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", "*.egg-info", ".tox", ".nox", "dist", "build", ".eggs"}
 }
 
+func (b *Backend) EnsureTools(_ context.Context, _ string) error {
+	return nil // Python tools are managed via uv and the project's venv
+}
+
 func (b *Backend) Validate(ctx context.Context, filename string) error {
 	cmd := exec.CommandContext(ctx, "python3", "-c",
 		fmt.Sprintf("import ast; ast.parse(open(%q).read())", filename))

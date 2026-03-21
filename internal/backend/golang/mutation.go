@@ -8,7 +8,7 @@ import (
 )
 
 func goMutationTest(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "go", "run", "github.com/danicat/selene/cmd/selene@latest", "./...")
+	cmd := exec.CommandContext(ctx, "go", "tool", "selene", "./...")
 	cmd.Dir = dir
 	out, runErr := cmd.CombinedOutput()
 
@@ -33,7 +33,7 @@ func filterNoise(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	var filtered []string
 	for _, line := range lines {
-		if strings.HasPrefix(line, "go: downloading ") || strings.Contains(line, "exit status") {
+		if strings.Contains(line, "exit status") {
 			continue
 		}
 		filtered = append(filtered, line)

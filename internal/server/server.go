@@ -301,6 +301,13 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 		s.activeBackends[be.Name()] = be
 	}
 
+	// Ensure required external tools are installed
+	for _, be := range backends {
+		if err := be.EnsureTools(ctx, absRoot); err != nil {
+			log.Printf("WARN: EnsureTools failed for %s: %v", be.Name(), err)
+		}
+	}
+
 	// Cancel any previous crawl before starting a new one
 	if s.crawlCancel != nil {
 		s.crawlCancel()

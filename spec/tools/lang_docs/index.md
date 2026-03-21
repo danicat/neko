@@ -16,8 +16,8 @@ The `read_docs` tool (`internal/tools/lang/docs/docs.go`) fetches documentation 
    - It delegates to the backend's `FetchDocs(ctx, dir, import_path, symbol)` method.
 
 3. **Backend Implementations**:
-   - **Go**: Uses `go doc` under the hood. The `golang.godoc` package executes `go doc -all <pkg> <symbol>`, captures the plain text output, and converts it into readable Markdown for the LLM. It falls back to HTTP vanity URL resolution if local package lookup fails.
-   - **Python**: Executes `python -c "import pydoc; pydoc.render_doc('<pkg>.<symbol>')"` to extract docstrings.
+   - **Go**: The `golang.godoc` package performs AST-based documentation extraction using Go's `go/doc` and `go/parser` packages. It resolves the package directory via `go list`, parses the source files, and renders the documentation as Markdown. It falls back to HTTP vanity URL resolution if local package lookup fails.
+   - **Python**: Executes `python3 -m pydoc <target>` (via `uv run`) to extract docstrings.
 
 4. **Output**:
    - Returns a structured documentation block that includes signatures, types, and comments, keeping the agent within the CLI context.

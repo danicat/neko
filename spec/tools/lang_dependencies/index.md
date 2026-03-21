@@ -15,7 +15,7 @@ The `add_dependencies` tool (`internal/tools/lang/get/get.go`) simplifies projec
 
 3. **Backend Implementations**:
    - **Go**: Executes `go get <package>` followed by `go mod tidy` to clean up the module file.
-   - **Python**: Typically writes the package to `requirements.txt` or runs `pip install`.
+   - **Python**: Uses `uv add <package>` to install into the project's virtual environment.
 
 4. **Synchronous Documentation (The "Get and Learn" pattern)**:
    - After a successful installation, the tool doesn't just return "success".

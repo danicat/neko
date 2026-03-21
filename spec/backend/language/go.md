@@ -1,7 +1,7 @@
 # Go Implementation
 
 ## Overview
-The Go language backend (`internal/backend/golang`) leverages standard Go toolchain commands and integrates heavily with `gopls`.
+The Go language backend (`internal/backend/golang`) leverages the standard Go toolchain and integrates with `gopls` for LSP support.
 
 ## Implementation Details
 
@@ -9,15 +9,27 @@ The Go language backend (`internal/backend/golang`) leverages standard Go toolch
    - Matches if `go.mod` exists in the workspace.
 
 2. **LSP Binding**:
-   - `LSPCommand()` returns `gopls` with arguments to ensure semantic tokens and hover capabilities are enabled.
+   - `LSPCommand()` returns `gopls` with options for semantic tokens, hover, and staticcheck diagnostics.
 
-3. **BuildPipeline**:
-   - Executes `go build ./...` to verify compilation.
-   - Executes `go test -cover ./...` to run tests.
-   - Importantly, it parses the standard error output of the Go compiler and test runner, translating raw strings into structured diagnostic formats that Neko can present cleanly to the LLM.
+3. **Tool Setup** (`EnsureTools`):
+   - On `open_project`, installs required tools into the project's `go.mod` via `go get -tool`:
+     - `selene` — mutation testing
+     - `testquery` — test coverage SQL database
+     - `modernize` — code modernization analysis
+   - See [External Tool Management](tools.md) for the full strategy.
 
-4. **Modernization & Formatting**:
-   - `Format()` invokes standard `go fmt` and `goimports` to ensure files adhere to Go conventions before they are read back or committed.
+4. **BuildPipeline**:
+   - Executes in order: `go mod tidy` → `gofmt` → `go build` → `go test -cover` → lint.
+   - Lint uses `go tool golangci-lint` (installed via `EnsureTools`).
+   - Results are formatted as a structured Markdown report.
 
-5. **Advanced**:
-   - Supports ingesting test coverage data into Neko's local `testdb` for SQL querying via the `testquery` tool.
+5. **Modernization & Formatting**:
+   - `Format()` uses `goimports` (via `golang.org/x/tools/imports`) for formatting and import organization.
+   - `Modernize()` invokes `go tool modernize` to detect and optionally auto-fix legacy Go patterns.
+
+6. **Mutation Testing**:
+   - Delegates to `go tool selene` for AST-level mutation testing.
+
+7. **Test Coverage Database**:
+   - `BuildTestDB` invokes `go tool testquery build` to run tests with coverage and ingest results into a SQLite database.
+   - `QueryTestDB` invokes `go tool testquery query` for SQL-based coverage analysis.

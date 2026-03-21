@@ -81,6 +81,25 @@ func (b *Backend) SkipDirs() []string {
 	return []string{"vendor", "testdata"}
 }
 
+// requiredTools lists Go module paths that must be available via `go tool`.
+var requiredTools = []string{
+	"github.com/danicat/selene/cmd/selene",
+	"github.com/danicat/testquery",
+	"github.com/golangci/golangci-lint/cmd/golangci-lint",
+	"golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize",
+}
+
+func (b *Backend) EnsureTools(ctx context.Context, dir string) error {
+	for _, tool := range requiredTools {
+		cmd := exec.CommandContext(ctx, "go", "get", "-tool", tool)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to install tool %s: %v\n%s", tool, err, string(out))
+		}
+	}
+	return nil
+}
+
 func (b *Backend) Validate(ctx context.Context, filename string) error {
 	fset := token.NewFileSet()
 	_, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)

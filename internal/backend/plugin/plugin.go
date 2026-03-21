@@ -175,6 +175,10 @@ func expandArgs(templateArgs []string, vars map[string]string) []string {
 	return result
 }
 
+func (b *PluginBackend) EnsureTools(_ context.Context, _ string) error {
+	return nil // Plugin tools are managed externally
+}
+
 func (b *PluginBackend) Validate(ctx context.Context, filename string) error {
 	if _, ok := b.plugin.Commands["validate"]; !ok {
 		return nil // Optional: no validator configured

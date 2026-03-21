@@ -9,7 +9,7 @@ The `test_mutations` tool (`internal/tools/lang/mutation/mutation.go`) measures 
    - Calls `LanguageBackend.MutationTest`.
 
 2. **Backend Execution**:
-   - For Go, the backend uses **Selene** (`github.com/danicat/selene`) via `go run`.
+   - For Go, the backend uses **Selene** (`github.com/danicat/selene`) via `go tool selene`.
    - Selene introduces subtle logical mutations into the AST (e.g., changing `<` to `>`, or `==` to `!=`) and runs the test suite against each mutation.
    - Build noise and unrelated output lines are filtered from the results.
 

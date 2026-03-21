@@ -17,7 +17,7 @@ func goBuildTestDB(ctx context.Context, dir string, pkg string) error {
 
 	dbPath := filepath.Join(dir, dbFile)
 
-	buildCmd := exec.CommandContext(ctx, "go", "run", "github.com/danicat/testquery@latest",
+	buildCmd := exec.CommandContext(ctx, "go", "tool", "testquery",
 		"build", "--pkg", pkg, "--output", dbFile)
 	buildCmd.Dir = dir
 	out, buildErr := buildCmd.CombinedOutput()
@@ -32,7 +32,7 @@ func goBuildTestDB(ctx context.Context, dir string, pkg string) error {
 }
 
 func goQueryTestDB(ctx context.Context, dir string, query string) (string, error) {
-	cmd := exec.CommandContext(ctx, "go", "run", "github.com/danicat/testquery@latest",
+	cmd := exec.CommandContext(ctx, "go", "tool", "testquery",
 		"query", "--db", dbFile, "--format", "table", query)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()

@@ -14,11 +14,14 @@ To support a new programming language in Neko, a developer must implement the `L
    - `LSPCommand() (command string, args []string, ok bool)`: Specifies the binary to execute (e.g., `gopls`, `pyright-langserver`).
    - `InitializationOptions() map[string]any`: Custom config to send during the LSP handshake.
 
-3. **Core Operations**:
+3. **Setup**:
+   - `EnsureTools(ctx, dir) error`: Ensures all required external tools are installed and available. Called once during `open_project`. See [External Tool Management](tools.md) for the strategy each language uses.
+
+4. **Core Operations**:
    - `BuildPipeline(ctx, dir, opts) (*BuildReport, error)`: The primary Quality Gate. Expected to compile, lint, and/or test the code.
    - `Format(ctx, filename) error`: Defines how the language auto-formats its files.
    - `Modernize(ctx, dir, fix) (string, error)`: Applies idiomatic updates or auto-fixes (e.g., `go fmt`, `ruff check --fix`).
 
-4. **Advanced Tools**:
+5. **Advanced Tools**:
    - `MutationTest(ctx, dir) (string, error)`: Executes mutation testing if the language ecosystem supports it.
    - `BuildTestDB` and `QueryTestDB`: Hooks for the SQL-based test querying system.

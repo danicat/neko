@@ -17,5 +17,5 @@ The `build` tool (`internal/tools/lang/quality/build.go`) forces the LLM to veri
    - The backend constructs a Markdown-formatted string directly (not a struct), organizing results into sections:
      - **Build status**: Compiler errors with file/line references.
      - **Test results**: Pass/fail summary with coverage percentage when available.
-     - **Lint output**: Warnings and suggestions from `staticcheck` or equivalent.
+     - **Lint output**: Warnings and suggestions from `golangci-lint` (via `go tool`).
    - This succinct Markdown report highlights exactly what failed so the LLM can fix it in the next turn, without flooding the context with thousands of lines of raw terminal output.
