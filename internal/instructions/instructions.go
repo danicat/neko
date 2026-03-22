@@ -42,6 +42,9 @@ func Get(cfg *config.Config, reg *backend.Registry) string {
 	if isEnabled("read_file") {
 		sb.WriteString(toolnames.Registry["read_file"].Instruction + "\n")
 	}
+	if isEnabled("multi_read") {
+		sb.WriteString(toolnames.Registry["multi_read"].Instruction + "\n")
+	}
 	if isEnabled("list_files") {
 		sb.WriteString(toolnames.Registry["list_files"].Instruction + "\n")
 	}
@@ -51,6 +54,9 @@ func Get(cfg *config.Config, reg *backend.Registry) string {
 	sb.WriteString("### ✏️ Editing: Ensure Safety\n")
 	if isEnabled("edit_file") {
 		sb.WriteString(toolnames.Registry["edit_file"].Instruction + "\n")
+	}
+	if isEnabled("line_edit") {
+		sb.WriteString(toolnames.Registry["line_edit"].Instruction + "\n")
 	}
 	if isEnabled("create_file") {
 		sb.WriteString(toolnames.Registry["create_file"].Instruction + "\n")

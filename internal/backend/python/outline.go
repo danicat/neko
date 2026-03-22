@@ -44,7 +44,9 @@ def outline(filename):
                     m_args = ast.unparse(item.args) if item.args.args else ""
                     m_ret = f" -> {ast.unparse(item.returns)}" if item.returns else ""
                     m_prefix = "async " if isinstance(item, ast.AsyncFunctionDef) else ""
-                    methods.append(f"{m_dec}    {m_prefix}def {item.name}({m_args}){m_ret}: ...")
+                    m_doc = ast.get_docstring(item)
+                    m_doc_str = f'\n        """{m_doc}"""' if m_doc else ""
+                    methods.append(f"{m_dec}    {m_prefix}def {item.name}({m_args}){m_ret}: ...{m_doc_str}")
             method_block = "\n".join(methods) if methods else "    ..."
             lines.append(f"{decorators}class {node.name}{base_str}:{doc_str}\n{method_block}")
         elif isinstance(node, ast.Assign):

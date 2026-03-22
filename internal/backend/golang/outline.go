@@ -96,6 +96,21 @@ func outlinize(f *ast.File) *ast.File {
 					if s.Doc != nil {
 						allowedComments[s.Doc] = true
 					}
+					// Field docstrings in structs and method docstrings in interfaces
+					switch t := s.Type.(type) {
+					case *ast.StructType:
+						for _, field := range t.Fields.List {
+							if field.Doc != nil {
+								allowedComments[field.Doc] = true
+							}
+						}
+					case *ast.InterfaceType:
+						for _, method := range t.Methods.List {
+							if method.Doc != nil {
+								allowedComments[method.Doc] = true
+							}
+						}
+					}
 				case *ast.ValueSpec:
 					if s.Doc != nil {
 						allowedComments[s.Doc] = true

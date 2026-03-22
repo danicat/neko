@@ -49,6 +49,18 @@ func MultiRegister(mcpServer *mcp.Server, s Server) {
 	})
 }
 
+// LineRegister registers the line_edit tool with the server.
+func LineRegister(mcpServer *mcp.Server, s Server) {
+	def := toolnames.Registry["line_edit"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        def.Name,
+		Title:       def.Title,
+		Description: def.Description,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args LineParams) (*mcp.CallToolResult, any, error) {
+		return lineEditHandler(ctx, req, args, s)
+	})
+}
+
 // Params defines the input parameters for the edit_file tool.
 type Params struct {
 	File       string  `json:"file" jsonschema:"The path to the file to edit"`
@@ -63,6 +75,14 @@ type Params struct {
 // MultiParams defines the input parameters for the multi_edit tool.
 type MultiParams struct {
 	Edits []Params `json:"edits" jsonschema:"List of files and their proposed edits"`
+}
+
+// LineParams defines the input parameters for the line_edit tool.
+type LineParams struct {
+	File       string `json:"file" jsonschema:"The path to the file to edit"`
+	StartLine  int    `json:"start_line" jsonschema:"The line number to start replacement from (1-based)"`
+	EndLine    int    `json:"end_line" jsonschema:"The line number to end replacement at (inclusive, 1-based)"`
+	NewContent string `json:"new_content" jsonschema:"The new code to insert"`
 }
 
 // MatchResult represents a potential match in the file.
@@ -170,6 +190,109 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 
 	if !anyLSP {
 		resSb.WriteString("\n*Note: No LSP active for affected files. Global semantic verification skipped.*")
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
+	}, nil, nil
+}
+
+func lineEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args LineParams, s Server) (*mcp.CallToolResult, any, error) {
+	if args.StartLine <= 0 || args.EndLine < args.StartLine {
+		return nil, nil, fmt.Errorf("invalid line range: %d-%d", args.StartLine, args.EndLine)
+	}
+
+	absPath, err := filepath.Abs(args.File)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := roots.Global.Validate(absPath); err != nil {
+		return nil, nil, err
+	}
+	args.File = absPath
+
+	content, err := os.ReadFile(args.File)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	original := string(content)
+	startOffset, endOffset, err := shared.GetLineOffsets(original, args.StartLine, args.EndLine)
+	if err != nil {
+		return nil, nil, fmt.Errorf("line range error: %w", err)
+	}
+
+	newContent := original[:startOffset] + args.NewContent + original[endOffset:]
+
+	be := s.ForFile(ctx, args.File)
+	var lspClient *lsp.Client
+	if be != nil {
+		if cmd, cmdArgs, ok := be.LSPCommand(); ok {
+			workspaceRoot := s.ProjectRoot()
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
+			lspClient, _ = lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
+		}
+	}
+
+	if lspClient != nil {
+		if err := lspClient.DidOpen(ctx, args.File, original); err != nil {
+			return nil, nil, fmt.Errorf("LSP open failed: %w", err)
+		}
+		if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+			return nil, nil, fmt.Errorf("LSP change failed: %w", err)
+		}
+		// Organize imports and format
+		if edits, err := lspClient.OrganizeImports(ctx, args.File); err == nil && len(edits) > 0 {
+			newContent = lsp.ApplyTextEdits(newContent, edits)
+			if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+				return nil, nil, fmt.Errorf("LSP change failed after import organization: %w", err)
+			}
+		}
+		if edits, err := lspClient.Format(ctx, args.File); err == nil && len(edits) > 0 {
+			newContent = lsp.ApplyTextEdits(newContent, edits)
+			if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+				return nil, nil, fmt.Errorf("LSP change failed after formatting: %w", err)
+			}
+		}
+	}
+
+	// Write file
+	//nolint:gosec // G306
+	if err := os.WriteFile(args.File, []byte(newContent), 0644); err != nil {
+		return nil, nil, fmt.Errorf("failed to write file: %w", err)
+	}
+
+	var resSb strings.Builder
+	resSb.WriteString(fmt.Sprintf("✅ Successfully edited %s (Lines %d-%d)\n", args.File, args.StartLine, args.EndLine))
+
+	// RAG Re-indexing
+	if s.RAGEnabled() {
+		var symbols []lsp.DocumentSymbol
+		if lspClient != nil {
+			symbols, _ = lspClient.DocumentSymbol(ctx, args.File)
+		}
+		var imports []string
+		if be != nil {
+			imports, _ = be.ParseImports(ctx, args.File)
+		}
+		if err := s.IngestFile(ctx, args.File, newContent, symbols, imports); err != nil {
+			return nil, nil, fmt.Errorf("RAG indexing failed: %w", err)
+		}
+	}
+
+	if lspClient != nil {
+		if _, err := lspClient.WaitForDiagnostics(ctx, args.File); err != nil {
+			return nil, nil, fmt.Errorf("LSP diagnostics wait failed: %w", err)
+		}
+		allDiags := lspClient.GetAllDiagnostics()
+		workspaceRoot := s.ProjectRoot()
+		if workspaceRoot == "" {
+			workspaceRoot, _ = filepath.Abs(".")
+		}
+		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
+		lspClient.DidClose(ctx, args.File)
 	}
 
 	return &mcp.CallToolResult{
@@ -327,7 +450,6 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 			return "", nil, fmt.Errorf("LSP save failed: %w", err)
 		}
 	} else if be != nil {
-
 		// Manual validation fallback for non-LSP backends or when LSP is down
 		if err := be.Validate(ctx, args.File); err != nil {
 			return "", nil, err

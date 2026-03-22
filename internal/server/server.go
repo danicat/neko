@@ -142,7 +142,7 @@ func (s *Server) RegisterHandlers() error {
 func (s *Server) registerHandlersLocked() error {
 	if !s.projectOpen {
 		// Lobby Phase
-		s.mcpServer.RemoveTools("close_project", "read_file", "edit_file", "list_files", "create_file", "build", "read_docs", "add_dependencies", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code", "semantic_search", "multi_edit", "rename_symbol")
+		s.mcpServer.RemoveTools("close_project", "read_file", "multi_read", "edit_file", "line_edit", "list_files", "create_file", "build", "read_docs", "add_dependencies", "test_mutations", "query_tests", "describe", "find_definition", "find_references", "review_code", "semantic_search", "multi_edit", "rename_symbol")
 
 		mcp.AddTool(s.mcpServer, &mcp.Tool{
 			Name:        "open_project",
@@ -176,6 +176,7 @@ func (s *Server) registerHandlersLocked() error {
 		// Agnostic tools
 		read.Register(s.mcpServer, s)
 		edit.Register(s.mcpServer, s)
+		edit.LineRegister(s.mcpServer, s)
 		edit.MultiRegister(s.mcpServer, s)
 		list.Register(s.mcpServer, s)
 		if s.ragEngine != nil {
@@ -374,9 +375,11 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 }
 
 func (s *Server) crawlProject(ctx context.Context, root string) {
-	skipDirs := map[string]bool{".git": true, ".neko": true}
-	for _, d := range s.registry.AllSkipDirs() {
-		skipDirs[d] = true
+	skipDirs := map[string]bool{".git": true, ".neko": true, "node_modules": true}
+	for _, be := range s.activeBackends {
+		for _, d := range be.SkipDirs() {
+			skipDirs[d] = true
+		}
 	}
 
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

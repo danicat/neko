@@ -28,7 +28,7 @@ type Server interface {
 	ProjectRoot() string
 }
 
-// Register registers the read_file tool with the server.
+// Register registers the read_file and multi_read tools with the server.
 func Register(mcpServer *mcp.Server, s Server) {
 	def := toolnames.Registry["read_file"]
 	mcp.AddTool(mcpServer, &mcp.Tool{
@@ -38,6 +38,45 @@ func Register(mcpServer *mcp.Server, s Server) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args Params) (*mcp.CallToolResult, any, error) {
 		return readHandler(ctx, req, args, s)
 	})
+
+	multiDef := toolnames.Registry["multi_read"]
+	mcp.AddTool(mcpServer, &mcp.Tool{
+		Name:        multiDef.Name,
+		Title:       multiDef.Title,
+		Description: multiDef.Description,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args MultiParams) (*mcp.CallToolResult, any, error) {
+		return multiReadHandler(ctx, req, args, s)
+	})
+}
+
+// MultiParams defines the input parameters for the multi_read tool.
+type MultiParams struct {
+	Reads []Params `json:"reads" jsonschema:"List of files to read. Each item supports file, outline, start_line, and end_line."`
+}
+
+func multiReadHandler(ctx context.Context, req *mcp.CallToolRequest, args MultiParams, s Server) (*mcp.CallToolResult, any, error) {
+	if len(args.Reads) == 0 {
+		return nil, nil, fmt.Errorf("no files specified for multi_read")
+	}
+
+	var combinedContent []mcp.Content
+	for _, readArg := range args.Reads {
+		res, _, err := readHandler(ctx, req, readArg, s)
+		if err != nil {
+			// Prepend an error message for this file, but continue with others
+			errMsg := fmt.Sprintf("# Error reading %s: %v\n\n", readArg.File, err)
+			combinedContent = append(combinedContent, &mcp.TextContent{Text: errMsg})
+			continue
+		}
+		if res != nil {
+			combinedContent = append(combinedContent, res.Content...)
+			combinedContent = append(combinedContent, &mcp.TextContent{Text: "\n---\n\n"})
+		}
+	}
+
+	return &mcp.CallToolResult{
+		Content: combinedContent,
+	}, nil, nil
 }
 
 // Params defines the input parameters for the read_file tool.

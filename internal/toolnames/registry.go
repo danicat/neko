@@ -38,6 +38,12 @@ var Registry = map[string]ToolDef{
 		Description: "Initializes a new source file, automatically creating parent directories and applying language-appropriate formatting. Ensures new files are immediately compliant with project style guides.",
 		Instruction: "*   **`create_file`**: Initialize a new source file.\n    *   **Usage:** `create_file(file=\"src/utils.go\", content=\"package utils\n...\")`\n    *   **Outcome:** A correctly formatted, directory-synced file is created.",
 	},
+	"line_edit": {
+		Name:        "line_edit",
+		Title:       "Line-Based Edit",
+		Description: "A surgical editing tool that operates on absolute line ranges rather than fuzzy content matching. Ideal when exact line numbers are known.",
+		Instruction: "*   **`line_edit`**: Replace a specific line range with new content.\n    *   **Usage:** `line_edit(file=\"main.go\", start_line=10, end_line=15, new_content=\"...\")`",
+	},
 	"edit_file": {
 		Name:        "edit_file",
 		Title:       "Edit File",
@@ -49,6 +55,12 @@ var Registry = map[string]ToolDef{
 		Title:       "Multi-File Edit",
 		Description: "Applies multiple file edits in a single turn. Ensures project-wide semantic integrity by providing a unified diagnostic report after all changes are applied.",
 		Instruction: "*   **`multi_edit`**: Apply multiple file changes in a single Turn.\n    *   **Usage:** `multi_edit(edits=[{\"file\": \"...\", \"old_content\": \"...\", \"new_content\": \"...\"}, ...])`\n    *   **Outcome:** Multiple files are updated, followed by a full project diagnostic list.",
+	},
+	"multi_read": {
+		Name:        "multi_read",
+		Title:       "Read Multiple Files",
+		Description: "Reads multiple files or line ranges in a single turn to reduce token overhead.",
+		Instruction: "*   **`multi_read`**: Inspect multiple files in a single turn.\n    *   **Usage:** `multi_read(reads=[{\"file\": \"main.go\", \"start_line\": 10, \"end_line\": 20}, {\"file\": \"utils.go\", \"outline\": true}])`",
 	},
 	"read_file": {
 
@@ -101,8 +113,8 @@ var Registry = map[string]ToolDef{
 	"query_tests": {
 		Name:        "query_tests",
 		Title:       "Query Tests",
-		Description: "Queries test results and coverage data using SQL. Uses a persistent database to avoid re-running tests on every query. Set rebuild=true after code changes to refresh the database.",
-		Instruction: "*   **`query_tests`**: Query test results with SQL.\n    *   **Usage:** `query_tests(query=\"SELECT * FROM all_coverage WHERE count = 0\", language=\"go\")`\n    *   **Outcome:** Tabular results from the SQL query over test and coverage data.",
+		Description: "Queries test results and coverage data using SQL. Schema: all_tests, all_coverage, test_coverage, all_code. Uses a persistent database to avoid re-running tests on every query. Set rebuild=true after code changes to refresh the database.",
+		Instruction: "*   **`query_tests`**: Query test results with SQL.\n    *   **Available Tables:** `all_tests`, `all_coverage`, `test_coverage`, `all_code`.\n    *   **Usage:** `query_tests(query=\"SELECT * FROM all_coverage WHERE count = 0\", language=\"go\")`\n    *   **Outcome:** Tabular results from the SQL query over test and coverage data.",
 	},
 
 	// --- LSP ---
