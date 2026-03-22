@@ -3,12 +3,29 @@
 # Read JSON input from stdin
 input=$(cat)
 
-# Extract tool name and command using jq
+# Extract tool name using jq
 tool_name=$(echo "$input" | jq -r '.tool_name')
-command=$(echo "$input" | jq -r '.tool_input.command // ""')
 
-# Only process run_shell_command
+# 1. Block the built-in read_file tool
+if [[ "$tool_name" == "read_file" ]]; then
+    # Log to stderr for debugging
+    echo "Hook: Blocked built-in 'read_file' tool" >&2
+
+    # Return a JSON denial instructing the agent to use mcp_neko_read_file
+    cat <<EOF
+{
+  "decision": "deny",
+  "reason": "Optimization Hook: The built-in 'read_file' tool lacks language server integration and structural awareness. You MUST use the 'mcp_neko_read_file' tool instead to read file contents within this project to maintain the semantic context pipeline.",
+  "systemMessage": "🛑 Blocked built-in read_file"
+}
+EOF
+    exit 0
+fi
+
+# 2. Block raw shell reads
 if [[ "$tool_name" == "run_shell_command" ]]; then
+  command=$(echo "$input" | jq -r '.tool_input.command // ""')
+
   # List of common commands used to read file contents
   read_commands=("cat " "less " "more " "head " "tail ")
   

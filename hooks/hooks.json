@@ -6,8 +6,19 @@
         {
           "name": "neko-block-shell-reads",
           "type": "command",
-          "command": "bash ${extensionPath}${/}hooks${/}block_shell_reads.sh",
+          "command": "bash ${extensionPath}${/}hooks${/}block_reads.sh",
           "description": "Optimizes context usage by blocking manual file reads via shell and redirecting to neko's structure-aware read_file tool."
+        }
+      ]
+    },
+    {
+      "matcher": "read_file",
+      "hooks": [
+        {
+          "name": "neko-block-builtin-read",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_reads.sh",
+          "description": "Blocks the built-in read_file tool and redirects to neko's structure-aware mcp_neko_read_file tool."
         }
       ]
     }
