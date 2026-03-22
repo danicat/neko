@@ -36,6 +36,7 @@ archives:
       - CHANGELOG.md
       - plugins/**/*
       - skills/**/*
+      - hooks/**/*
 
 changelog:
   sort: asc
