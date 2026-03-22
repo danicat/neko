@@ -49,9 +49,6 @@ func TestListHandler_EmptyDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("expected success, got error: %s", textContent(res))
-	}
 	text := textContent(res)
 	if !strings.Contains(text, "Found 0 files") {
 		t.Errorf("expected 'Found 0 files' in output, got: %s", text)
@@ -81,9 +78,6 @@ func TestListHandler_WithFiles(t *testing.T) {
 	res, _, err := listHandler(context.TODO(), nil, Params{Dir: tmpDir}, s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("expected success, got error: %s", textContent(res))
 	}
 	text := textContent(res)
 	if !strings.Contains(text, "a.txt") || !strings.Contains(text, "b.txt") {

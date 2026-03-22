@@ -48,32 +48,25 @@ func mutationHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s
 		var err error
 		absDir, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absDir); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	output, err := be.MutationTest(ctx, absDir)
 	if err != nil {
-		return errorResult(fmt.Sprintf("mutation testing failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("mutation testing failed: %w", err)
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: output}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

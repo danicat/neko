@@ -43,15 +43,15 @@ type Params struct {
 
 func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.File == "" {
-		return errorResult("name (file path) cannot be empty"), nil, nil
+		return nil, nil, fmt.Errorf("name (file path) cannot be empty")
 	}
 
 	absPath, err := filepath.Abs(args.File)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	if err := roots.Global.Validate(absPath); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	args.File = absPath
 
@@ -59,7 +59,7 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 
 	//nolint:gosec // G301
 	if err := os.MkdirAll(filepath.Dir(args.File), 0755); err != nil {
-		return errorResult(fmt.Sprintf("failed to create directory: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	be := s.ForFile(ctx, args.File)
@@ -76,16 +76,22 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 
 	if lspClient != nil {
 		// Prepare content (format/organize imports if possible before writing)
-		lspClient.DidOpen(ctx, args.File, args.Content)
+		if err := lspClient.DidOpen(ctx, args.File, args.Content); err != nil {
+			return nil, nil, fmt.Errorf("LSP open failed: %w", err)
+		}
 
 		content := args.Content
 		if edits, err := lspClient.OrganizeImports(ctx, args.File); err == nil && len(edits) > 0 {
 			content = lsp.ApplyTextEdits(content, edits)
-			lspClient.DidChange(ctx, args.File, content)
+			if err := lspClient.DidChange(ctx, args.File, content); err != nil {
+				return nil, nil, fmt.Errorf("LSP change failed after import organization: %w", err)
+			}
 		}
 		if edits, err := lspClient.Format(ctx, args.File); err == nil && len(edits) > 0 {
 			content = lsp.ApplyTextEdits(content, edits)
-			lspClient.DidChange(ctx, args.File, content)
+			if err := lspClient.DidChange(ctx, args.File, content); err != nil {
+				return nil, nil, fmt.Errorf("LSP change failed after formatting: %w", err)
+			}
 		}
 		finalContent = []byte(content)
 	}
@@ -93,28 +99,33 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 	// 1. Direct Write
 	//nolint:gosec // G306
 	if err := os.WriteFile(args.File, finalContent, 0644); err != nil {
-		return errorResult(fmt.Sprintf("failed to write file: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to write file: %w", err)
 	}
 
-	var warning string
 	if lspClient != nil {
 		// 2. didChangeWatchedFiles (Trigger indexing for new file)
-		lspClient.DidChangeWatchedFiles(ctx, args.File, 1) // 1: Created
+		if err := lspClient.DidChangeWatchedFiles(ctx, args.File, 1); err != nil {
+			return nil, nil, fmt.Errorf("LSP file creation notification failed: %w", err)
+		}
 
 		// 3. didSave
-		lspClient.DidSave(ctx, args.File, string(finalContent))
+		if err := lspClient.DidSave(ctx, args.File, string(finalContent)); err != nil {
+			return nil, nil, fmt.Errorf("LSP save failed: %w", err)
+		}
 
 		// 4. WaitForDiagnostics
-		lspClient.WaitForDiagnostics(ctx, args.File)
+		if _, err := lspClient.WaitForDiagnostics(ctx, args.File); err != nil {
+			return nil, nil, fmt.Errorf("LSP diagnostics wait failed: %w", err)
+		}
 	} else if be != nil {
+
 		// Manual validation fallback for non-LSP backends or when LSP is down
 		if err := be.Validate(ctx, args.File); err != nil {
-			warning = fmt.Sprintf("\n\n**WARNING:** Post-write syntax check failed: %v", err)
+			return nil, nil, err
 		}
 	}
 
 	// Synchronous RAG Re-indexing
-	var ragErr error
 	if s.RAGEnabled() {
 		var symbols []lsp.DocumentSymbol
 		if lspClient != nil {
@@ -124,7 +135,9 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		if be != nil {
 			imports, _ = be.ParseImports(ctx, args.File)
 		}
-		ragErr = s.IngestFile(ctx, args.File, string(finalContent), symbols, imports)
+		if err := s.IngestFile(ctx, args.File, string(finalContent), symbols, imports); err != nil {
+			return nil, nil, fmt.Errorf("RAG indexing failed: %w", err)
+		}
 	}
 
 	if lspClient != nil {
@@ -145,23 +158,9 @@ func createHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s S
 		resSb.WriteString(lsp.FormatDiagnostics(allDiags, workspaceRoot))
 	} else {
 		resSb.WriteString("\n*Note: LSP unavailable. Global semantic verification skipped.*")
-		if warning != "" {
-			resSb.WriteString(warning)
-		}
-	}
-
-	if ragErr != nil {
-		resSb.WriteString(fmt.Sprintf("\n**⚠️ RAG indexing failed:** %v\n", ragErr))
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

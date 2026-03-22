@@ -35,10 +35,10 @@ func (ts *testServer) ProjectRoot() string {
 }
 
 type mockBackend struct {
-	name        string
-	buildDBErr  error
-	queryOut    string
-	queryErr    error
+	name       string
+	buildDBErr error
+	queryOut   string
+	queryErr   error
 }
 
 func (b *mockBackend) Name() string                          { return b.name }
@@ -52,11 +52,11 @@ func (b *mockBackend) LanguageID() string                    { return "go" }
 func (b *mockBackend) InitializationOptions() map[string]any { return nil }
 func (b *mockBackend) Capabilities() []backend.Capability    { return nil }
 
-func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)           { return "", nil }
-func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) Validate(_ context.Context, _ string) error                    { return nil }
-func (b *mockBackend) Format(_ context.Context, _ string) error                      { return nil }
+func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
+func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
+func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (b *mockBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (b *mockBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (b *mockBackend) BuildPipeline(_ context.Context, _ string, _ backend.BuildOpts) (*backend.BuildReport, error) {
 	return nil, nil
 }
@@ -89,15 +89,12 @@ func textContent(res *mcp.CallToolResult) string {
 func TestQueryHandler_EmptyQuery(t *testing.T) {
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := queryHandler(context.TODO(), nil, Params{Query: ""}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := queryHandler(context.TODO(), nil, Params{Query: ""}, s)
+	if err == nil {
 		t.Fatal("expected error for empty query")
 	}
-	if !strings.Contains(textContent(res), "query is required") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "query is required") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -113,15 +110,12 @@ func TestQueryHandler_ResolveBackendError(t *testing.T) {
 
 	s := &testServer{resolveErr: fmt.Errorf("no backend"), root: tmpDir}
 
-	res, _, err := queryHandler(context.TODO(), nil, Params{Query: "SELECT 1", Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = queryHandler(context.TODO(), nil, Params{Query: "SELECT 1", Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for resolve failure")
 	}
-	if !strings.Contains(textContent(res), "no backend") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "no backend") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -146,10 +140,8 @@ func TestQueryHandler_BuildDBAndQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
 	if !strings.Contains(textContent(res), "foo") {
+
 		t.Errorf("expected query output, got: %s", textContent(res))
 	}
 }
@@ -175,15 +167,13 @@ func TestQueryHandler_QueryError(t *testing.T) {
 	}
 	s := &testServer{be: be, root: tmpDir}
 
-	res, _, err := queryHandler(context.TODO(), nil, Params{Query: "INVALID SQL", Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = queryHandler(context.TODO(), nil, Params{Query: "INVALID SQL", Dir: tmpDir}, s)
+
+	if err == nil {
 		t.Fatal("expected error for query failure")
 	}
-	if !strings.Contains(textContent(res), "syntax error in SQL") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "syntax error in SQL") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -204,15 +194,12 @@ func TestQueryHandler_BuildDBError_NoDBFile(t *testing.T) {
 	s := &testServer{be: be, root: tmpDir}
 
 	// No DB file exists and build fails -> error
-	res, _, err := queryHandler(context.TODO(), nil, Params{Query: "SELECT 1", Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = queryHandler(context.TODO(), nil, Params{Query: "SELECT 1", Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for build failure with no DB")
 	}
-	if !strings.Contains(textContent(res), "failed to build test database") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "failed to build test database") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -245,9 +232,6 @@ func TestQueryHandler_BuildDBError_DBFileExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
 	if !strings.Contains(textContent(res), "partial results") {
 		t.Errorf("expected partial results, got: %s", textContent(res))
 	}
@@ -271,7 +255,5 @@ func TestQueryHandler_DefaultDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+	_ = res
 }

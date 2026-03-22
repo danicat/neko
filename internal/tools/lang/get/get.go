@@ -41,7 +41,7 @@ type Params struct {
 
 func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if len(args.Packages) == 0 {
-		return errorResult("at least one package is required"), nil, nil
+		return nil, nil, fmt.Errorf("at least one package is required")
 	}
 
 	var absDir string
@@ -54,22 +54,22 @@ func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Serv
 		var err error
 		absDir, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absDir); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	output, err := be.AddDependency(ctx, absDir, args.Packages)
 	if err != nil {
-		return errorResult(fmt.Sprintf("failed to add dependency: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to add dependency: %w", err)
 	}
 
 	var sb strings.Builder
@@ -86,11 +86,4 @@ func getHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Serv
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

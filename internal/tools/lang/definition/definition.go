@@ -50,26 +50,26 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 		var err error
 		absPath, err = filepath.Abs(args.File)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absPath); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	be := s.ForFile(ctx, absPath)
 	if be == nil {
-		return errorResult(fmt.Sprintf("no language backend for %s", absPath)), nil, nil
+		return nil, nil, fmt.Errorf("no language backend for %s", absPath)
 	}
 
 	command, cmdArgs, ok := be.LSPCommand()
 	if !ok {
-		return errorResult(fmt.Sprintf("no LSP server configured for %s", be.Name())), nil, nil
+		return nil, nil, fmt.Errorf("no LSP server configured for %s", be.Name())
 	}
 
 	if _, err := exec.LookPath(command); err != nil {
-		return errorResult(fmt.Sprintf("LSP server %q not found in PATH", command)), nil, nil
+		return nil, nil, fmt.Errorf("LSP server %q not found in PATH", command)
 	}
 
 	workspaceRoot := s.ProjectRoot()
@@ -78,23 +78,16 @@ func handler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, a
 	}
 	client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, command, cmdArgs, be.LanguageID(), be.InitializationOptions())
 	if err != nil {
-		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to start LSP server: %w", err)
 	}
 
 	locations, err := client.Definition(ctx, absPath, args.Line, args.Col)
 	if err != nil {
-		return errorResult(fmt.Sprintf("definition lookup failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("definition lookup failed: %w", err)
 	}
 
 	text := lsp.FormatLocations(locations)
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: text}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

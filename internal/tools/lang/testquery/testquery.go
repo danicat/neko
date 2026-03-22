@@ -43,7 +43,7 @@ type Params struct {
 
 func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.Query == "" {
-		return errorResult("query is required"), nil, nil
+		return nil, nil, fmt.Errorf("query is required")
 	}
 
 	var absDir string
@@ -56,17 +56,17 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		var err error
 		absDir, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absDir); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	pkg := args.Pkg
@@ -80,7 +80,7 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		if err := be.BuildTestDB(ctx, absDir, pkg); err != nil {
 			// Build may fail if tests fail, but the DB might still be usable
 			if !fileExists(dbPath) {
-				return errorResult(fmt.Sprintf("failed to build test database: %v", err)), nil, nil
+				return nil, nil, fmt.Errorf("failed to build test database: %w", err)
 			}
 		}
 	}
@@ -88,7 +88,7 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 	// Execute the query
 	output, err := be.QueryTestDB(ctx, absDir, args.Query)
 	if err != nil {
-		return errorResult(fmt.Sprintf("query failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("query failed: %w", err)
 	}
 
 	return &mcp.CallToolResult{
@@ -99,11 +99,4 @@ func queryHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

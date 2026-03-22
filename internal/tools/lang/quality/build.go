@@ -37,6 +37,7 @@ type Params struct {
 	Dir          string `json:"dir,omitempty" jsonschema:"Directory to build in (default: current)"`
 	Language     string `json:"language,omitempty" jsonschema:"Explicit language backend to use"`
 	Packages     string `json:"packages,omitempty" jsonschema:"Packages to check (default: . or ./...)"`
+	Output       string `json:"output,omitempty" jsonschema:"Output path for the compiled binary (e.g. bin/)"`
 	RunTests     *bool  `json:"run_tests,omitempty" jsonschema:"Run unit tests (default: true)"`
 	RunLint      *bool  `json:"run_lint,omitempty" jsonschema:"Run linter (default: true)"`
 	AutoFix      *bool  `json:"auto_fix,omitempty" jsonschema:"Auto-fix format and lint issues (default: true)"`
@@ -54,12 +55,12 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 		var err error
 		absDir, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return result(err.Error(), true), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absDir); err != nil {
-		return result(err.Error(), true), nil, nil
+		return nil, nil, err
 	}
 
 	runTests := true
@@ -81,18 +82,19 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
-		return result(err.Error(), true), nil, nil
+		return nil, nil, err
 	}
 
 	report, err := be.BuildPipeline(ctx, absDir, backend.BuildOpts{
 		Packages:     args.Packages,
+		Output:       args.Output,
 		RunTests:     runTests,
 		RunLint:      runLint,
 		AutoFix:      autoFix,
 		RunModernize: runModernize,
 	})
 	if err != nil {
-		return result(fmt.Sprintf("build pipeline error: %v", err), true), nil, nil
+		return nil, nil, fmt.Errorf("build pipeline error: %w", err)
 	}
 
 	// LSP Sync if auto-fix was used
@@ -102,27 +104,31 @@ func buildHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Se
 			if workspaceRoot == "" {
 				workspaceRoot, _ = filepath.Abs(".")
 			}
-			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
-				// We don't know exactly which files changed, so we trigger a generic workspace update
-				lspClient.DidChangeWatchedFiles(ctx, ".", 2) // 2: Changed
-
-				// Pull diagnostics to include in the report
-				lspClient.PullDiagnostics(ctx)
-				workspaceRoot := s.ProjectRoot()
-				if workspaceRoot == "" {
-					workspaceRoot, _ = filepath.Abs(".")
-				}
-				report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot)
+			lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to sync LSP after auto-fix: %w", err)
 			}
+
+			// We don't know exactly which files changed, so we trigger a generic workspace update
+			if err := lspClient.DidChangeWatchedFiles(ctx, ".", 2); err != nil { // 2: Changed
+				return nil, nil, fmt.Errorf("LSP workspace update failed: %w", err)
+			}
+
+			// Pull diagnostics to include in the report
+			if err := lspClient.PullDiagnostics(ctx); err != nil {
+				return nil, nil, fmt.Errorf("LSP diagnostics pull failed: %w", err)
+			}
+			workspaceRoot = s.ProjectRoot()
+
+			if workspaceRoot == "" {
+				workspaceRoot, _ = filepath.Abs(".")
+			}
+			report.Output += "\n---\n" + lsp.FormatDiagnostics(lspClient.GetAllDiagnostics(), workspaceRoot)
 		}
 	}
 
-	return result(report.Output, report.IsError), nil, nil
-}
-
-func result(content string, isError bool) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
-		IsError: isError,
-		Content: []mcp.Content{&mcp.TextContent{Text: content}},
-	}
+		Content: []mcp.Content{&mcp.TextContent{Text: report.Output}},
+		IsError: report.IsError,
+	}, nil, nil
 }

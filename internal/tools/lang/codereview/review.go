@@ -4,7 +4,6 @@ package codereview
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,14 +35,10 @@ type Server interface {
 func Register(mcpServer *mcp.Server, s Server, defaultModel string) {
 	reviewHandler, err := NewHandler(context.Background(), defaultModel)
 	if err != nil {
-		if errors.Is(err, ErrAuthFailed) || errors.Is(err, ErrVertexAIMissingConfig) {
-			fmt.Fprintf(os.Stderr, "WARN: Disabling review_code tool: %v\n", err)
-		} else {
-			fmt.Fprintf(os.Stderr, "ERROR: Disabling review_code tool: failed to create handler: %v\n", err)
-		}
 		return
 	}
 	def := toolnames.Registry["review_code"]
+
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        def.Name,
 		Title:       def.Title,
@@ -170,41 +165,21 @@ func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params,
 	if args.File != "" {
 		absPath, err := filepath.Abs(args.File)
 		if err != nil {
-			return &mcp.CallToolResult{
-				IsError: true,
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: fmt.Sprintf("invalid path: %v", err)},
-				},
-			}, nil, nil
+			return nil, nil, fmt.Errorf("invalid path: %w", err)
 		}
 		if err := roots.Global.Validate(absPath); err != nil {
-			return &mcp.CallToolResult{
-				IsError: true,
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: err.Error()},
-				},
-			}, nil, nil
+			return nil, nil, err
 		}
 
 		data, err := os.ReadFile(absPath)
 		if err != nil {
-			return &mcp.CallToolResult{
-				IsError: true,
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: fmt.Sprintf("failed to read file %s: %v", absPath, err)},
-				},
-			}, nil, nil
+			return nil, nil, fmt.Errorf("failed to read file %s: %w", absPath, err)
 		}
 		content = string(data)
 	}
 
 	if content == "" {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "either 'file' or 'file_content' must be provided"},
-			},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("either 'file' or 'file_content' must be provided")
 	}
 
 	modelName := h.defaultModel
@@ -232,12 +207,7 @@ func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params,
 
 	resp, err := h.generator.GenerateContent(ctx, modelName, contents, config)
 	if err != nil {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("failed to generate content: %v", err)},
-			},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("failed to generate content: %w", err)
 	}
 
 	return processResponse(resp)
@@ -245,32 +215,17 @@ func (h *Handler) Tool(ctx context.Context, _ *mcp.CallToolRequest, args Params,
 
 func processResponse(resp *genai.GenerateContentResponse) (*mcp.CallToolResult, *Result, error) {
 	if !isValidResponse(resp) {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "no response content from model. Check model parameters and API status"},
-			},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("no response content from model. Check model parameters and API status")
 	}
 
 	part := resp.Candidates[0].Content.Parts[0]
 	if part.Text == "" {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "unexpected response format from model, expected text content"},
-			},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("unexpected response format from model, expected text content")
 	}
 
 	suggestions, err := parseReviewResponse(part.Text)
 	if err != nil {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("failed to parse model response: %v", err)},
-			},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("failed to parse model response: %w", err)
 	}
 
 	return &mcp.CallToolResult{

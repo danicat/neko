@@ -59,12 +59,12 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		var err error
 		absPath, err = filepath.Abs(args.File)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absPath); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	args.File = absPath
 
@@ -95,12 +95,12 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 			var err error
 			out, err = be.Outline(ctx, absPath)
 			if err != nil {
-				return errorResult(fmt.Sprintf("failed to generate outline: %v", err)), nil, nil
+				return nil, nil, fmt.Errorf("failed to generate outline: %w", err)
 			}
 		}
 
 		if out == "" {
-			return errorResult("outline not supported for this file type"), nil, nil
+			return nil, nil, fmt.Errorf("outline not supported for this file type")
 		}
 
 		var sb strings.Builder
@@ -134,7 +134,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	//nolint:gosec // G304
 	content, err := os.ReadFile(absPath)
 	if err != nil {
-		return errorResult(fmt.Sprintf("failed to read file: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	original := string(content)
@@ -149,8 +149,11 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 			}
 			if client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				lspClient = client
-				lspClient.DidOpen(ctx, absPath, original)
+				if err := lspClient.DidOpen(ctx, absPath, original); err != nil {
+					return nil, nil, fmt.Errorf("LSP open failed: %w", err)
+				}
 			}
+
 		}
 	}
 
@@ -162,7 +165,7 @@ func readHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	startOffset, endOffset, err := shared.GetLineOffsets(original, startLine, endLine)
 	if err != nil {
-		return errorResult(fmt.Sprintf("line range error: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("line range error: %w", err)
 	}
 
 	viewContent := original[startOffset:endOffset]
@@ -339,13 +342,6 @@ func langTag(path string) string {
 	}
 }
 
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
-}
-
 func formatTypeInfo(lineNum int, name string, hoverText string) string {
 	// Simple Markdown parser for hover text
 	lines := strings.Split(hoverText, "\n")
@@ -478,5 +474,5 @@ func formatTypeInfo(lineNum int, name string, hoverText string) string {
 		return ""
 	}
 
-		return sb.String()
+	return sb.String()
 }

@@ -31,7 +31,14 @@ func goBuild(ctx context.Context, dir string, opts backend.BuildOpts) (*backend.
 
 	// 2. Build
 	sb.WriteString("### 🛠️ Build: ")
-	buildOut, buildErr := runGoCmdOutput(ctx, dir, "go", "build", pkgs)
+
+	buildArgs := []string{"build"}
+	if opts.Output != "" {
+		buildArgs = append(buildArgs, "-o", opts.Output)
+	}
+	buildArgs = append(buildArgs, pkgs)
+
+	buildOut, buildErr := runGoCmdOutput(ctx, dir, "go", buildArgs...)
 	if buildErr != nil {
 		sb.WriteString("❌ FAILED\n\n")
 		sb.WriteString(goFormatOutput(buildOut))

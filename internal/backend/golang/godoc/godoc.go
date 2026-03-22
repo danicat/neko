@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/doc"
-	"go/parser"
 	"go/printer"
 	"go/token"
 	"os"
@@ -176,17 +175,19 @@ func resolvePackageDir(ctx context.Context, pkgPath string) (string, error) {
 }
 
 func parsePackageDocs(ctx context.Context, importPath, pkgDir, symbolName, requestedPath string) (*Doc, error) {
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, pkgDir, nil, parser.ParseComments)
+	cfg := &packages.Config{
+		Context: ctx,
+		Dir:     pkgDir,
+		Mode:    packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+	}
+	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		return nil, fmt.Errorf("parser.ParseDir failed: %w", err)
+		return nil, fmt.Errorf("packages.Load failed: %w", err)
 	}
 
-	var files []*ast.File
-	for _, pkg := range pkgs {
-		for _, file := range pkg.Files {
-			files = append(files, file)
-		}
+	var pkg *packages.Package
+	if len(pkgs) > 0 {
+		pkg = pkgs[0]
 	}
 
 	result := &Doc{
@@ -205,7 +206,7 @@ func parsePackageDocs(ctx context.Context, importPath, pkgDir, symbolName, reque
 		}
 	}
 
-	if len(files) == 0 {
+	if pkg == nil || len(pkg.Syntax) == 0 {
 		if len(result.SubPackages) > 0 {
 			result.Package = "module_root"
 			result.Description = fmt.Sprintf("Module root for %s. No Go source files found in the root directory, but sub-packages exist.", importPath)
@@ -214,7 +215,7 @@ func parsePackageDocs(ctx context.Context, importPath, pkgDir, symbolName, reque
 		return nil, fmt.Errorf("no files found in package %s", importPath)
 	}
 
-	targetPkg, err := doc.NewFromFiles(fset, files, importPath)
+	targetPkg, err := doc.NewFromFiles(pkg.Fset, pkg.Syntax, importPath)
 	if err != nil {
 		return nil, fmt.Errorf("doc.NewFromFiles failed: %w", err)
 	}
@@ -229,19 +230,19 @@ func parsePackageDocs(ctx context.Context, importPath, pkgDir, symbolName, reque
 	if symbolName == "" {
 		result.Description = targetPkg.Doc
 		result.Definition = fmt.Sprintf("package %s // import %q", pkgName, importPath)
-		result.Examples = extractExamples(fset, targetPkg.Examples)
+		result.Examples = extractExamples(pkg.Fset, targetPkg.Examples)
 
 		for _, f := range targetPkg.Funcs {
-			result.Funcs = append(result.Funcs, bufferCode(fset, f.Decl))
+			result.Funcs = append(result.Funcs, bufferCode(pkg.Fset, f.Decl))
 		}
 		for _, t := range targetPkg.Types {
-			result.Types = append(result.Types, bufferCode(fset, t.Decl))
+			result.Types = append(result.Types, bufferCode(pkg.Fset, t.Decl))
 		}
 		for _, v := range targetPkg.Vars {
-			result.Vars = append(result.Vars, bufferCode(fset, v.Decl))
+			result.Vars = append(result.Vars, bufferCode(pkg.Fset, v.Decl))
 		}
 		for _, c := range targetPkg.Consts {
-			result.Consts = append(result.Consts, bufferCode(fset, c.Decl))
+			result.Consts = append(result.Consts, bufferCode(pkg.Fset, c.Decl))
 		}
 
 		return result, nil
@@ -250,7 +251,7 @@ func parsePackageDocs(ctx context.Context, importPath, pkgDir, symbolName, reque
 	result.SymbolName = symbolName
 	result.PkgGoDevURL = fmt.Sprintf("https://pkg.go.dev/%s#%s", importPath, symbolName)
 
-	found, candidates := findSymbol(fset, targetPkg, symbolName, result)
+	found, candidates := findSymbol(pkg.Fset, targetPkg, symbolName, result)
 	if !found {
 		fuzzyMatches := findFuzzyMatches(symbolName, candidates)
 		msg := fmt.Sprintf("symbol %q not found in package %s", symbolName, importPath)
@@ -459,7 +460,8 @@ func Render(d *Doc) string {
 			if name == "" {
 				name = "Package Example"
 			}
-						fmt.Fprintf(&buf, "#### %s\n\n", name)
+			fmt.Fprintf(&buf, "#### %s\n\n", name)
+
 			buf.WriteString("```go\n")
 			buf.WriteString(ex.Code)
 			buf.WriteString("\n```\n")

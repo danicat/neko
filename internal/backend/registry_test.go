@@ -17,12 +17,12 @@ type mockBackend struct {
 	tier           int
 }
 
-func (m *mockBackend) Capabilities() []Capability                                    { return nil }
-func (m *mockBackend) Outline(_ context.Context, _ string) (string, error)           { return "", nil }
-func (m *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error)    { return nil, nil }
-func (m *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error)    { return nil, nil }
-func (m *mockBackend) Validate(_ context.Context, _ string) error                    { return nil }
-func (m *mockBackend) Format(_ context.Context, _ string) error                      { return nil }
+func (m *mockBackend) Capabilities() []Capability                                 { return nil }
+func (m *mockBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
+func (m *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
+func (m *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (m *mockBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (m *mockBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (m *mockBackend) BuildPipeline(_ context.Context, _ string, _ BuildOpts) (*BuildReport, error) {
 	return nil, nil
 }
@@ -32,23 +32,23 @@ func (m *mockBackend) FetchDocs(_ context.Context, _ string, _ string, _ string)
 func (m *mockBackend) AddDependency(_ context.Context, _ string, _ []string) (string, error) {
 	return "", nil
 }
-func (m *mockBackend) InitProject(_ context.Context, _ InitOpts) error              { return nil }
+func (m *mockBackend) InitProject(_ context.Context, _ InitOpts) error               { return nil }
 func (m *mockBackend) Modernize(_ context.Context, _ string, _ bool) (string, error) { return "", nil }
 func (m *mockBackend) MutationTest(_ context.Context, _ string) (string, error)      { return "", nil }
 func (m *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error       { return nil }
 func (m *mockBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error) {
 	return "", nil
 }
-func (m *mockBackend) LSPCommand() (string, []string, bool)   { return "", nil, false }
-func (m *mockBackend) InitializationOptions() map[string]any   { return nil }
+func (m *mockBackend) LSPCommand() (string, []string, bool)          { return "", nil, false }
+func (m *mockBackend) InitializationOptions() map[string]any         { return nil }
 func (m *mockBackend) EnsureTools(_ context.Context, _ string) error { return nil }
-func (m *mockBackend) LanguageID() string                      { return m.name }
-func (m *mockBackend) Name() string                            { return m.name }
-func (m *mockBackend) FileExtensions() []string                { return m.extensions }
-func (m *mockBackend) SkipDirs() []string                      { return m.skipDirs }
-func (m *mockBackend) ProjectMarkers() []string                { return m.projectMarkers }
-func (m *mockBackend) Tier() int                               { return m.tier }
-func (m *mockBackend) IsStdLibURI(_ string) bool               { return false }
+func (m *mockBackend) LanguageID() string                            { return m.name }
+func (m *mockBackend) Name() string                                  { return m.name }
+func (m *mockBackend) FileExtensions() []string                      { return m.extensions }
+func (m *mockBackend) SkipDirs() []string                            { return m.skipDirs }
+func (m *mockBackend) ProjectMarkers() []string                      { return m.projectMarkers }
+func (m *mockBackend) Tier() int                                     { return m.tier }
+func (m *mockBackend) IsStdLibURI(_ string) bool                     { return false }
 
 func TestNewRegistry(t *testing.T) {
 	reg := NewRegistry()

@@ -50,9 +50,9 @@ func NewClient(ctx context.Context, command string, args []string, workspaceRoot
 	// outlive the context of the request that triggered its start.
 	// The client is closed explicitly via Close().
 	cmd := exec.Command(command, args...)
-	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
 	}
@@ -101,9 +101,17 @@ func (c *Client) Close() error {
 		defer cancel()
 
 		// Send shutdown request
-		c.call(ctx, "shutdown", nil)
+		if _, err := c.call(ctx, "shutdown", nil); err != nil {
+			closeErr = fmt.Errorf("LSP shutdown failed: %w", err)
+		}
 		// Send exit notification
-		c.notify("exit", nil)
+		if err := c.notify("exit", nil); err != nil {
+			if closeErr != nil {
+				closeErr = fmt.Errorf("%v; exit failed: %w", closeErr, err)
+			} else {
+				closeErr = fmt.Errorf("LSP exit failed: %w", err)
+			}
+		}
 
 		c.stdin.Close()
 		close(c.done)
@@ -404,7 +412,7 @@ func FormatDiagnostics(diagnostics map[string][]Diagnostic, workspaceRoot string
 
 		path := URIToPath(uri)
 
-				// Filter out dependencies / stdlib
+		// Filter out dependencies / stdlib
 		// 1. Must be within the workspace root
 		if !strings.HasPrefix(path, workspaceRoot) {
 			continue
@@ -772,9 +780,9 @@ func (c *Client) GetSymbolAt(ctx context.Context, file string, line, col int) (s
 		return "", err
 	}
 	text := HoverText(hover)
-	lines := strings.Split(text, "\n")
+	lines := strings.SplitSeq(text, "\n")
 	// Skip markdown code fence lines (e.g. "```go" or "```")
-	for _, l := range lines {
+	for l := range lines {
 		trimmed := strings.TrimSpace(l)
 		if trimmed == "" || strings.HasPrefix(trimmed, "```") {
 			continue
@@ -1023,8 +1031,11 @@ func (c *Client) readMessage() (json.RawMessage, error) {
 			break
 		}
 		if strings.HasPrefix(line, "Content-Length: ") {
-			fmt.Sscanf(line, "Content-Length: %d", &contentLength)
+			if _, err := fmt.Sscanf(line, "Content-Length: %d", &contentLength); err != nil {
+				return nil, fmt.Errorf("invalid Content-Length header: %w", err)
+			}
 		}
+
 	}
 	if contentLength == 0 {
 		return nil, fmt.Errorf("missing Content-Length header")

@@ -10,7 +10,6 @@ import (
 
 	"github.com/danicat/neko/internal/backend"
 	"github.com/danicat/neko/internal/core/roots"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/genai"
 )
 
@@ -37,29 +36,21 @@ func (g *mockGenerator) GenerateContent(_ context.Context, _ string, _ []*genai.
 	return g.resp, g.err
 }
 
-func textContent(res *mcp.CallToolResult) string {
-	if len(res.Content) == 0 {
-		return ""
-	}
-	return res.Content[0].(*mcp.TextContent).Text
-}
-
 func TestTool_EmptyContent(t *testing.T) {
+
 	h := &Handler{
 		generator:    &mockGenerator{},
 		defaultModel: "test-model",
 	}
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := h.Tool(context.TODO(), nil, Params{}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := h.Tool(context.TODO(), nil, Params{}, s)
+
+	if err == nil {
 		t.Fatal("expected error for empty content")
 	}
-	if !strings.Contains(textContent(res), "either 'file' or 'file_content' must be provided") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "either 'file' or 'file_content' must be provided") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -83,13 +74,11 @@ func TestTool_WithFileContent(t *testing.T) {
 	}
 	s := &testServer{root: "/tmp/test"}
 
-	res, data, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
+	_, data, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+
 	result, ok := data.(*Result)
 	if !ok {
 		t.Fatal("expected *Result from structured data")
@@ -136,15 +125,9 @@ func TestTool_WithFilePath(t *testing.T) {
 	}
 	s := &testServer{root: tmpDir}
 
-	res, _, err := h.Tool(context.TODO(), nil, Params{File: filePath}, s)
+	_, _, err = h.Tool(context.TODO(), nil, Params{File: filePath}, s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
-	if !strings.Contains(textContent(res), "No issues found") {
-		t.Errorf("expected 'No issues found' in output, got: %s", textContent(res))
 	}
 }
 
@@ -165,15 +148,12 @@ func TestTool_FileNotFound(t *testing.T) {
 	s := &testServer{root: tmpDir}
 
 	filePath := filepath.Join(tmpDir, "nonexistent.go")
-	res, _, err := h.Tool(context.TODO(), nil, Params{File: filePath}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = h.Tool(context.TODO(), nil, Params{File: filePath}, s)
+	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
-	if !strings.Contains(textContent(res), "failed to read file") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "failed to read file") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -186,15 +166,12 @@ func TestTool_GenerateError(t *testing.T) {
 	}
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
+	if err == nil {
 		t.Fatal("expected error for generation failure")
 	}
-	if !strings.Contains(textContent(res), "API rate limit") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "API rate limit") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -207,15 +184,12 @@ func TestTool_NilResponse(t *testing.T) {
 	}
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main"}, s)
+	if err == nil {
 		t.Fatal("expected error for nil response")
 	}
-	if !strings.Contains(textContent(res), "no response content") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "no response content") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -240,12 +214,9 @@ func TestTool_CustomModel(t *testing.T) {
 	}
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main", ModelName: "custom-model"}, s)
+	_, _, err := h.Tool(context.TODO(), nil, Params{FileContent: "package main", ModelName: "custom-model"}, s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
 	}
 }
 

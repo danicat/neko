@@ -35,8 +35,7 @@ type Params struct {
 
 func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.CallToolResult, any, error) {
 	if args.Dir == "" {
-
-		return errorResult("dir is required"), nil, nil
+		return nil, nil, fmt.Errorf("dir is required")
 	}
 	if args.ModulePath == "" {
 		args.ModulePath = args.Dir
@@ -44,10 +43,10 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 
 	absPath, err := filepath.Abs(args.Dir)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	if err := roots.Global.Validate(absPath); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	// Determine backend: explicit language or detect from project markers
@@ -55,7 +54,7 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 	if args.Language != "" {
 		be = reg.Get(args.Language)
 		if be == nil {
-			return errorResult(fmt.Sprintf("unknown language: %q. Supported: %v", args.Language, reg.Available())), nil, nil
+			return nil, nil, fmt.Errorf("unknown language: %q. Supported: %v", args.Language, reg.Available())
 		}
 	} else {
 		// Try to detect from existing markers in the directory
@@ -73,12 +72,12 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 			for _, d := range detected {
 				names = append(names, d.Name())
 			}
-			return errorResult(fmt.Sprintf("multiple languages detected (%s), please specify the 'language' parameter", strings.Join(names, ", "))), nil, nil
+			return nil, nil, fmt.Errorf("multiple languages detected (%s), please specify the 'language' parameter", strings.Join(names, ", "))
 		}
 	}
 
 	if be == nil {
-		return errorResult("No language backend available for project initialization."), nil, nil
+		return nil, nil, fmt.Errorf("No language backend available for project initialization.")
 	}
 
 	err = be.InitProject(ctx, backend.InitOpts{
@@ -87,7 +86,7 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 		Dependencies: args.Dependencies,
 	})
 	if err != nil {
-		return errorResult(fmt.Sprintf("project initialization failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("project initialization failed: %w", err)
 	}
 
 	var sb strings.Builder
@@ -108,11 +107,4 @@ func InitHandler(ctx context.Context, args Params, reg *backend.Registry) (*mcp.
 			&mcp.TextContent{Text: sb.String()},
 		},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

@@ -14,12 +14,12 @@ type stubBackend struct {
 	name string
 }
 
-func (s *stubBackend) Capabilities() []backend.Capability                                    { return nil }
-func (s *stubBackend) Outline(_ context.Context, _ string) (string, error)                   { return "", nil }
-func (s *stubBackend) ImportDocs(_ context.Context, _ []string) ([]string, error)             { return nil, nil }
-func (s *stubBackend) ParseImports(_ context.Context, _ string) ([]string, error)             { return nil, nil }
-func (s *stubBackend) Validate(_ context.Context, _ string) error                             { return nil }
-func (s *stubBackend) Format(_ context.Context, _ string) error                               { return nil }
+func (s *stubBackend) Capabilities() []backend.Capability                         { return nil }
+func (s *stubBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
+func (s *stubBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
+func (s *stubBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (s *stubBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (s *stubBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (s *stubBackend) BuildPipeline(_ context.Context, _ string, _ backend.BuildOpts) (*backend.BuildReport, error) {
 	return nil, nil
 }
@@ -29,21 +29,23 @@ func (s *stubBackend) FetchDocs(_ context.Context, _ string, _ string, _ string)
 func (s *stubBackend) AddDependency(_ context.Context, _ string, _ []string) (string, error) {
 	return "", nil
 }
-func (s *stubBackend) InitProject(_ context.Context, _ backend.InitOpts) error                { return nil }
-func (s *stubBackend) Modernize(_ context.Context, _ string, _ bool) (string, error)          { return "", nil }
-func (s *stubBackend) MutationTest(_ context.Context, _ string) (string, error)               { return "", nil }
-func (s *stubBackend) BuildTestDB(_ context.Context, _ string, _ string) error                { return nil }
-func (s *stubBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error)      { return "", nil }
-func (s *stubBackend) LSPCommand() (string, []string, bool)                                   { return "", nil, false }
-func (s *stubBackend) InitializationOptions() map[string]any                                  { return nil }
-func (s *stubBackend) EnsureTools(_ context.Context, _ string) error                          { return nil }
-func (s *stubBackend) LanguageID() string                                                     { return s.name }
-func (s *stubBackend) Name() string                                                           { return s.name }
-func (s *stubBackend) FileExtensions() []string                                               { return nil }
-func (s *stubBackend) SkipDirs() []string                                                     { return nil }
-func (s *stubBackend) ProjectMarkers() []string                                               { return nil }
-func (s *stubBackend) Tier() int                                                              { return 0 }
-func (s *stubBackend) IsStdLibURI(_ string) bool                                              { return false }
+func (s *stubBackend) InitProject(_ context.Context, _ backend.InitOpts) error       { return nil }
+func (s *stubBackend) Modernize(_ context.Context, _ string, _ bool) (string, error) { return "", nil }
+func (s *stubBackend) MutationTest(_ context.Context, _ string) (string, error)      { return "", nil }
+func (s *stubBackend) BuildTestDB(_ context.Context, _ string, _ string) error       { return nil }
+func (s *stubBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error) {
+	return "", nil
+}
+func (s *stubBackend) LSPCommand() (string, []string, bool)          { return "", nil, false }
+func (s *stubBackend) InitializationOptions() map[string]any         { return nil }
+func (s *stubBackend) EnsureTools(_ context.Context, _ string) error { return nil }
+func (s *stubBackend) LanguageID() string                            { return s.name }
+func (s *stubBackend) Name() string                                  { return s.name }
+func (s *stubBackend) FileExtensions() []string                      { return nil }
+func (s *stubBackend) SkipDirs() []string                            { return nil }
+func (s *stubBackend) ProjectMarkers() []string                      { return nil }
+func (s *stubBackend) Tier() int                                     { return 0 }
+func (s *stubBackend) IsStdLibURI(_ string) bool                     { return false }
 
 func TestGet_HeaderWithBackends(t *testing.T) {
 	reg := backend.NewRegistry()

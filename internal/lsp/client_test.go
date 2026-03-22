@@ -13,7 +13,9 @@ func TestClient_Versioning(t *testing.T) {
 	}
 
 	tmpFile := filepath.Join(t.TempDir(), "test.go")
-	os.WriteFile(tmpFile, []byte("package main"), 0644)
+	if err := os.WriteFile(tmpFile, []byte("package main"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	uri := FileURI(tmpFile)
 

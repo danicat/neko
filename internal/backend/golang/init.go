@@ -53,8 +53,12 @@ func goInit(ctx context.Context, opts backend.InitOpts) error {
 		// Pre-fetch docs for dependencies so they're cached locally
 		for _, dep := range opts.Dependencies {
 			pkgPath := strings.Split(dep, "@")[0]
-			godoc.GetDocumentationWithFallback(ctx, pkgPath)
+			if _, err := godoc.GetDocumentationWithFallback(ctx, pkgPath); err != nil {
+				// We don't fail the whole init if doc fetching fails, but we must check the error
+				continue
+			}
 		}
+
 	}
 
 	return nil

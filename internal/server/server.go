@@ -4,7 +4,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,7 +76,7 @@ func New(cfg *config.Config, version string, reg *backend.Registry) *Server {
 	}, &mcp.ServerOptions{
 		Instructions: instructions.Get(cfg, reg),
 		RootsListChangedHandler: func(ctx context.Context, req *mcp.RootsListChangedRequest) {
-			roots.Global.Sync(ctx, req.Session)
+			_ = roots.Global.Sync(ctx, req.Session)
 		},
 	})
 
@@ -120,7 +119,6 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 		mcpHandler.ServeHTTP(w, r)
 	})
 
-	log.Printf("MCP HTTP Server starting on %s", addr)
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: handler,
@@ -128,7 +126,7 @@ func (s *Server) ServeHTTP(ctx context.Context, addr string) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		_ = srv.Shutdown(context.Background())
 	}()
 
 	return srv.ListenAndServe()
@@ -313,7 +311,7 @@ func (s *Server) ResolveBackend(language string) (backend.LanguageBackend, error
 }
 
 // establishProject handles the shared state transition when a project is opened or created.
-func (s *Server) establishProject(ctx context.Context, absRoot string, backends []backend.LanguageBackend) string {
+func (s *Server) establishProject(ctx context.Context, absRoot string, backends []backend.LanguageBackend) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -328,7 +326,7 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	// Ensure required external tools are installed
 	for _, be := range backends {
 		if err := be.EnsureTools(ctx, absRoot); err != nil {
-			log.Printf("WARN: EnsureTools failed for %s: %v", be.Name(), err)
+			return "", fmt.Errorf("failed to ensure tools for backend %s: %w", be.Name(), err)
 		}
 	}
 
@@ -347,16 +345,20 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 		s.crawlCancel = crawlCancel
 		go s.crawlProject(crawlCtx, absRoot)
 	} else {
-		log.Printf("WARN: Disabling semantic_search tool: %v", err)
+		return "", fmt.Errorf("failed to initialize RAG engine: %w", err)
 	}
 
 	// Eager LSP initialization
 	for _, be := range backends {
-		s.startLSP(ctx, be, absRoot)
+		if err := s.startLSP(ctx, be, absRoot); err != nil {
+			return "", err
+		}
 	}
 
 	// Update tools list
-	s.registerHandlersLocked()
+	if err := s.registerHandlersLocked(); err != nil {
+		return "", fmt.Errorf("failed to register tools: %w", err)
+	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Project established at %s\n", absRoot))
@@ -368,7 +370,7 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 	} else {
 		sb.WriteString("No specific language backends detected. General file tools are enabled.")
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 func (s *Server) crawlProject(ctx context.Context, root string) {
@@ -377,7 +379,8 @@ func (s *Server) crawlProject(ctx context.Context, root string) {
 		skipDirs[d] = true
 	}
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -410,24 +413,20 @@ func (s *Server) crawlProject(ctx context.Context, root string) {
 		}
 
 		imports, _ := be.ParseImports(ctx, path)
-		if err := s.ragEngine.IngestFile(ctx, path, string(content), symbols, imports); err != nil {
-			log.Printf("RAG ingest %s: %v", path, err)
-		}
+		_ = s.ragEngine.IngestFile(ctx, path, string(content), symbols, imports)
 		return nil
 	})
-	if err != nil {
-		log.Printf("RAG crawl failed: %v", err)
-	}
 }
 
-func (s *Server) startLSP(ctx context.Context, be backend.LanguageBackend, absRoot string) {
+func (s *Server) startLSP(ctx context.Context, be backend.LanguageBackend, absRoot string) error {
 	if cmd, args, ok := be.LSPCommand(); ok {
 		opts := be.InitializationOptions()
 		_, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), absRoot, cmd, args, be.LanguageID(), opts)
 		if err != nil {
-			log.Printf("Warning: failed to start LSP for %s: %v", be.LanguageID(), err)
+			return fmt.Errorf("failed to start LSP for %s: %w", be.LanguageID(), err)
 		}
 	}
+	return nil
 }
 
 // ForFile is the new routing mechanism that also handles dynamic backend activation.
@@ -450,12 +449,11 @@ func (s *Server) ForFile(ctx context.Context, path string) backend.LanguageBacke
 	}
 
 	// Dynamic activation ("On-Touch")
-	log.Printf("Dynamically activating backend: %s", be.Name())
 	s.activeBackends[be.Name()] = be
 	root := s.projectRoot
 
-	s.startLSP(ctx, be, root)
-	s.registerHandlersLocked() // Re-register to potentially surface new tools
+	_ = s.startLSP(ctx, be, root)
+	_ = s.registerHandlersLocked() // Re-register to potentially surface new tools
 
 	return be
 }
@@ -466,21 +464,18 @@ func (s *Server) openProjectHandler(ctx context.Context, _ *mcp.CallToolRequest,
 }) (*mcp.CallToolResult, any, error) {
 	absRoot, err := filepath.Abs(args.Dir)
 	if err != nil {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid path: %v", err)}},
-		}, nil, nil
+		return nil, nil, fmt.Errorf("invalid path: %w", err)
 	}
 
 	if err := roots.Global.Validate(absRoot); err != nil {
-		return &mcp.CallToolResult{
-			IsError: true,
-			Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
-		}, nil, nil
+		return nil, nil, err
 	}
 
 	backends := s.registry.DetectBackends(absRoot)
-	msg := s.establishProject(ctx, absRoot, backends)
+	msg, err := s.establishProject(ctx, absRoot, backends)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
@@ -506,7 +501,10 @@ func (s *Server) createProjectHandler(ctx context.Context, req *mcp.CallToolRequ
 		}
 	}
 
-	msg := s.establishProject(ctx, absRoot, backends)
+	msg, err := s.establishProject(ctx, absRoot, backends)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Combine messages
 	initMsg := res.Content[0].(*mcp.TextContent).Text
@@ -532,7 +530,7 @@ func (s *Server) closeProjectHandler(ctx context.Context, _ *mcp.CallToolRequest
 	s.activeBackends = make(map[string]backend.LanguageBackend)
 	s.seenDocs = make(map[string]map[string]bool)
 	s.seenTypeInfo = make(map[string]bool)
-	s.registerHandlersLocked()
+	_ = s.registerHandlersLocked()
 	s.mu.Unlock()
 
 	return &mcp.CallToolResult{

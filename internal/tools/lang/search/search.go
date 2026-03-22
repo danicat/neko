@@ -38,7 +38,7 @@ type Params struct {
 
 func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.Query == "" {
-		return errorResult("query is required"), nil, nil
+		return nil, nil, fmt.Errorf("query is required")
 	}
 
 	limit := args.Limit
@@ -51,7 +51,7 @@ func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 
 	results, err := s.RAGSearch(ctx, args.Query, limit)
 	if err != nil {
-		return errorResult(fmt.Sprintf("search failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("search failed: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -82,11 +82,4 @@ func searchHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: sb.String()}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

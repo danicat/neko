@@ -48,17 +48,15 @@ func (s *State) Get() []string {
 }
 
 // Sync synchronizes roots with the MCP client.
-func (s *State) Sync(ctx context.Context, session *mcp.ServerSession) {
+func (s *State) Sync(ctx context.Context, session *mcp.ServerSession) error {
 	if session == nil {
 		s.Add(".")
-		return
+		return nil
 	}
 
 	res, err := session.ListRoots(ctx, &mcp.ListRootsParams{})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to list roots from client: %v. Falling back to CWD.\n", err)
-		s.Add(".")
-		return
+		return fmt.Errorf("failed to list roots from client: %w", err)
 	}
 
 	var rts []string
@@ -80,6 +78,7 @@ func (s *State) Sync(ctx context.Context, session *mcp.ServerSession) {
 	s.mu.Lock()
 	s.roots = rts
 	s.mu.Unlock()
+	return nil
 }
 
 // Validate checks if the given path is within any of the registered roots.

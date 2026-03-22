@@ -51,12 +51,12 @@ func listHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		var err error
 		absRoot, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absRoot); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	args.Dir = absRoot
 
@@ -201,11 +201,4 @@ func walkDir(absRoot string, maxDepth int, skipDirs []string) (*mcp.CallToolResu
 
 func defaultSkipDirs() []string {
 	return []string{".git", ".idea", ".vscode", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox", "dist", "build", ".eggs"}
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

@@ -333,6 +333,6 @@ type SemanticTokensParams struct {
 
 // SemanticTokens represents the result of a semanticTokens request
 type SemanticTokens struct {
-	ResultId string `json:"resultId,omitempty"`
+	ResultID string `json:"resultId,omitempty"`
 	Data     []int  `json:"data"`
 }

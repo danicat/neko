@@ -14,9 +14,9 @@ import (
 )
 
 type testServer struct {
-	be       backend.LanguageBackend
+	be         backend.LanguageBackend
 	resolveErr error
-	root     string
+	root       string
 }
 
 func (ts *testServer) ForFile(_ context.Context, _ string) backend.LanguageBackend {
@@ -35,9 +35,9 @@ func (ts *testServer) ProjectRoot() string {
 }
 
 type mockBackend struct {
-	name          string
-	mutationOut   string
-	mutationErr   error
+	name        string
+	mutationOut string
+	mutationErr error
 }
 
 func (b *mockBackend) Name() string                          { return b.name }
@@ -51,11 +51,11 @@ func (b *mockBackend) LanguageID() string                    { return "go" }
 func (b *mockBackend) InitializationOptions() map[string]any { return nil }
 func (b *mockBackend) Capabilities() []backend.Capability    { return nil }
 
-func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)           { return "", nil }
-func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) Validate(_ context.Context, _ string) error                    { return nil }
-func (b *mockBackend) Format(_ context.Context, _ string) error                      { return nil }
+func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
+func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
+func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (b *mockBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (b *mockBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (b *mockBackend) BuildPipeline(_ context.Context, _ string, _ backend.BuildOpts) (*backend.BuildReport, error) {
 	return nil, nil
 }
@@ -72,7 +72,7 @@ func (b *mockBackend) Modernize(_ context.Context, _ string, _ bool) (string, er
 func (b *mockBackend) MutationTest(_ context.Context, _ string) (string, error) {
 	return b.mutationOut, b.mutationErr
 }
-func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error         { return nil }
+func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error { return nil }
 func (b *mockBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error) {
 	return "", nil
 }
@@ -102,9 +102,6 @@ func TestMutationHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
 	if !strings.Contains(textContent(res), "Mutation score: 85%") {
 		t.Errorf("unexpected output: %s", textContent(res))
 	}
@@ -122,15 +119,12 @@ func TestMutationHandler_ResolveBackendError(t *testing.T) {
 
 	s := &testServer{resolveErr: fmt.Errorf("no backend found"), root: tmpDir}
 
-	res, _, err := mutationHandler(context.TODO(), nil, Params{Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = mutationHandler(context.TODO(), nil, Params{Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for resolve failure")
 	}
-	if !strings.Contains(textContent(res), "no backend found") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "no backend found") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -147,15 +141,12 @@ func TestMutationHandler_MutationTestError(t *testing.T) {
 	be := &mockBackend{name: "test", mutationErr: fmt.Errorf("gremlins crashed")}
 	s := &testServer{be: be, root: tmpDir}
 
-	res, _, err := mutationHandler(context.TODO(), nil, Params{Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = mutationHandler(context.TODO(), nil, Params{Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for mutation test failure")
 	}
-	if !strings.Contains(textContent(res), "gremlins crashed") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "gremlins crashed") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -177,9 +168,7 @@ func TestMutationHandler_DefaultDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+	_ = res
 }
 
 func TestMutationHandler_ExplicitDir(t *testing.T) {
@@ -204,7 +193,5 @@ func TestMutationHandler_ExplicitDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+	_ = res
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,22 +54,22 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		var err error
 		absPath, err = filepath.Abs(args.File)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
 	if err := roots.Global.Validate(absPath); err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	be := s.ForFile(ctx, absPath)
 	if be == nil {
-		return errorResult(fmt.Sprintf("no language backend for %s", absPath)), nil, nil
+		return nil, nil, fmt.Errorf("no language backend for %s", absPath)
 	}
 
 	cmd, cmdArgs, ok := be.LSPCommand()
 	if !ok {
-		return errorResult(fmt.Sprintf("no LSP server configured for %s", be.Name())), nil, nil
+		return nil, nil, fmt.Errorf("no LSP server configured for %s", be.Name())
 	}
 
 	workspaceRoot := s.ProjectRoot()
@@ -77,15 +78,15 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 	}
 	client, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions())
 	if err != nil {
-		return errorResult(fmt.Sprintf("failed to start LSP server: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to start LSP server: %w", err)
 	}
 
 	edit, err := client.Rename(ctx, absPath, args.Line, args.Col, args.NewName)
 	if err != nil {
-		return errorResult(fmt.Sprintf("rename failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("rename failed: %w", err)
 	}
 	if edit == nil {
-		return errorResult("LSP returned no changes for rename"), nil, nil
+		return nil, nil, fmt.Errorf("LSP returned no changes for rename")
 	}
 
 	// Apply WorkspaceEdit
@@ -107,13 +108,11 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 			fileEdits[uri] = append(fileEdits[uri], tde.Edits...)
 		}
 	} else {
-		for uri, edits := range edit.Changes {
-			fileEdits[uri] = edits
-		}
+		maps.Copy(fileEdits, edit.Changes)
 	}
 
 	if len(fileEdits) == 0 {
-		return errorResult("rename produced no changes"), nil, nil
+		return nil, nil, fmt.Errorf("rename produced no changes")
 	}
 
 	for uri, edits := range fileEdits {
@@ -131,12 +130,16 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 		}
 
 		modifiedFiles[path] = true
-		client.DidSave(ctx, path, newContent)
+		if err := client.DidSave(ctx, path, newContent); err != nil {
+			return nil, nil, fmt.Errorf("LSP save failed for %s: %w", path, err)
+		}
 	}
 
 	// Trigger diagnostics for all modified files
 	for path := range modifiedFiles {
-		client.WaitForDiagnostics(ctx, path)
+		if _, err := client.WaitForDiagnostics(ctx, path); err != nil {
+			return nil, nil, fmt.Errorf("LSP diagnostics wait failed for %s: %w", path, err)
+		}
 	}
 
 	// Pull final health
@@ -150,11 +153,4 @@ func renameHandler(ctx context.Context, args Params, s Server) (*mcp.CallToolRes
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: resSb.String()}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

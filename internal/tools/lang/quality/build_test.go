@@ -43,20 +43,20 @@ type mockBackend struct {
 	buildErr    error
 }
 
-func (b *mockBackend) Name() string                 { return b.name }
-func (b *mockBackend) LanguageID() string            { return b.name }
-func (b *mockBackend) FileExtensions() []string      { return []string{".go"} }
-func (b *mockBackend) ProjectMarkers() []string      { return nil }
-func (b *mockBackend) SkipDirs() []string            { return nil }
-func (b *mockBackend) Tier() int                     { return 1 }
-func (b *mockBackend) IsStdLibURI(string) bool       { return false }
+func (b *mockBackend) Name() string                       { return b.name }
+func (b *mockBackend) LanguageID() string                 { return b.name }
+func (b *mockBackend) FileExtensions() []string           { return []string{".go"} }
+func (b *mockBackend) ProjectMarkers() []string           { return nil }
+func (b *mockBackend) SkipDirs() []string                 { return nil }
+func (b *mockBackend) Tier() int                          { return 1 }
+func (b *mockBackend) IsStdLibURI(string) bool            { return false }
 func (b *mockBackend) Capabilities() []backend.Capability { return nil }
 
-func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)       { return "", nil }
+func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
 func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
 func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (b *mockBackend) Validate(_ context.Context, _ string) error                { return nil }
-func (b *mockBackend) Format(_ context.Context, _ string) error                  { return nil }
+func (b *mockBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (b *mockBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (b *mockBackend) BuildPipeline(_ context.Context, _ string, opts backend.BuildOpts) (*backend.BuildReport, error) {
 	return b.buildReport, b.buildErr
 }
@@ -70,13 +70,13 @@ func (b *mockBackend) InitProject(_ context.Context, _ backend.InitOpts) error {
 func (b *mockBackend) Modernize(_ context.Context, _ string, _ bool) (string, error) {
 	return "", nil
 }
-func (b *mockBackend) MutationTest(_ context.Context, _ string) (string, error)      { return "", nil }
-func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error       { return nil }
+func (b *mockBackend) MutationTest(_ context.Context, _ string) (string, error) { return "", nil }
+func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error  { return nil }
 func (b *mockBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error) {
 	return "", nil
 }
-func (b *mockBackend) LSPCommand() (string, []string, bool) { return "", nil, false }
-func (b *mockBackend) InitializationOptions() map[string]any { return nil }
+func (b *mockBackend) LSPCommand() (string, []string, bool)          { return "", nil, false }
+func (b *mockBackend) InitializationOptions() map[string]any         { return nil }
 func (b *mockBackend) EnsureTools(_ context.Context, _ string) error { return nil }
 
 func resultText(res *mcp.CallToolResult) string {
@@ -88,13 +88,10 @@ func resultText(res *mcp.CallToolResult) string {
 
 func TestBuildHandler_OutsideRoots(t *testing.T) {
 	s := &testServer{root: "/some/root", backend: &mockBackend{name: "go"}}
-	res, _, err := buildHandler(context.Background(), nil, Params{
+	_, _, err := buildHandler(context.Background(), nil, Params{
 		Dir: "/outside/roots/path",
 	}, s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.IsError {
+	if err == nil {
 		t.Fatal("expected error for path outside roots")
 	}
 }
@@ -108,17 +105,14 @@ func TestBuildHandler_NoBackend(t *testing.T) {
 	roots.Global.Add(tmpDir)
 
 	s := &testServer{root: tmpDir, backend: nil, err: fmt.Errorf("no backend available")}
-	res, _, err := buildHandler(context.Background(), nil, Params{
+	_, _, err = buildHandler(context.Background(), nil, Params{
 		Dir: tmpDir,
 	}, s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.IsError {
+	if err == nil {
 		t.Fatal("expected error for nil backend")
 	}
-	if !strings.Contains(resultText(res), "no backend available") {
-		t.Errorf("unexpected error: %s", resultText(res))
+	if !strings.Contains(err.Error(), "no backend available") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -137,17 +131,14 @@ func TestBuildHandler_BuildPipelineError(t *testing.T) {
 			buildErr: fmt.Errorf("compilation failed"),
 		},
 	}
-	res, _, err := buildHandler(context.Background(), nil, Params{
+	_, _, err = buildHandler(context.Background(), nil, Params{
 		Dir: tmpDir,
 	}, s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.IsError {
+	if err == nil {
 		t.Fatal("expected error for build pipeline failure")
 	}
-	if !strings.Contains(resultText(res), "build pipeline error") {
-		t.Errorf("unexpected error: %s", resultText(res))
+	if !strings.Contains(err.Error(), "build pipeline error") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -175,10 +166,7 @@ func TestBuildHandler_Success(t *testing.T) {
 		AutoFix: &f, // disable auto-fix to avoid LSP sync
 	}, s)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", resultText(res))
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(resultText(res), "all tests passed") {
 		t.Errorf("expected success output, got: %s", resultText(res))
@@ -209,7 +197,7 @@ func TestBuildHandler_BuildReportsError(t *testing.T) {
 		AutoFix: &f,
 	}, s)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if !res.IsError {
 		t.Fatal("expected IsError when build report has errors")
@@ -244,10 +232,10 @@ func TestBuildHandler_DefaultDir(t *testing.T) {
 		AutoFix: &f,
 	}, s)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", resultText(res))
+	if !strings.Contains(resultText(res), "ok") {
+		t.Errorf("expected success output, got: %s", resultText(res))
 	}
 }
 
@@ -275,9 +263,9 @@ func TestBuildHandler_BoolDefaults(t *testing.T) {
 		Dir: tmpDir,
 	}, s)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", resultText(res))
+	if !strings.Contains(resultText(res), "ok") {
+		t.Errorf("expected success output, got: %s", resultText(res))
 	}
 }

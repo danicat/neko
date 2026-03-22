@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -212,14 +213,18 @@ func TestLoadPlugins_NonExistentDir(t *testing.T) {
 func TestLoadPlugins_SkipsNonJSON(t *testing.T) {
 	dir := t.TempDir()
 	//nolint:gosec // G306
-	os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("not a plugin"), 0644)
+	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("not a plugin"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	//nolint:gosec // G306
-	os.WriteFile(filepath.Join(dir, "rust.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(dir, "rust.json"), []byte(`{
 		"name": "rust",
 		"extensions": [".rs"],
 		"tier": 1,
 		"commands": {}
-	}`), 0644)
+	}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	backends, err := LoadPlugins(dir)
 	if err != nil {
@@ -281,10 +286,11 @@ func TestPluginBackend_OptionalCommands(t *testing.T) {
 	be := NewBackend(p)
 
 	// Validate and Format should return nil when not configured
-	if err := be.Validate(nil, "/tmp/test.min"); err != nil {
+	if err := be.Validate(context.TODO(), "/tmp/test.min"); err != nil {
+
 		t.Errorf("Validate() should return nil when not configured, got: %v", err)
 	}
-	if err := be.Format(nil, "/tmp/test.min"); err != nil {
+	if err := be.Format(context.TODO(), "/tmp/test.min"); err != nil {
 		t.Errorf("Format() should return nil when not configured, got: %v", err)
 	}
 }
@@ -298,7 +304,8 @@ func TestPluginBackend_ImportDocs_NoFetchDocs(t *testing.T) {
 	}
 	be := NewBackend(p)
 
-	docs, err := be.ImportDocs(nil, []string{"pkg1", "pkg2"})
+	docs, err := be.ImportDocs(context.TODO(), []string{"pkg1", "pkg2"})
+
 	if err != nil {
 		t.Errorf("ImportDocs() error = %v", err)
 	}

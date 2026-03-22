@@ -8,6 +8,7 @@ import (
 // BuildOpts holds options for the build pipeline.
 type BuildOpts struct {
 	Packages     string
+	Output       string
 	RunTests     bool
 	RunLint      bool
 	AutoFix      bool

@@ -43,7 +43,7 @@ type Params struct {
 
 func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	if args.ImportPath == "" {
-		return errorResult("import_path is required"), nil, nil
+		return nil, nil, fmt.Errorf("import_path is required")
 	}
 
 	// Validate format
@@ -52,7 +52,7 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		format = "markdown"
 	}
 	if format != "markdown" && format != "json" {
-		return errorResult("invalid format: must be 'markdown' or 'json'"), nil, nil
+		return nil, nil, fmt.Errorf("invalid format: must be 'markdown' or 'json'")
 	}
 
 	var absDir string
@@ -65,7 +65,7 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		var err error
 		absDir, err = filepath.Abs(args.Dir)
 		if err != nil {
-			return errorResult(err.Error()), nil, nil
+			return nil, nil, err
 		}
 	}
 
@@ -73,7 +73,7 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	// but we resolve the path for language detection.
 	be, err := s.ResolveBackend(args.Language)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	// For JSON format, use the Go backend's structured output if available
@@ -81,7 +81,7 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 		if goBe, ok := be.(*golang.Backend); ok {
 			doc, err := goBe.FetchDocsJSON(ctx, args.ImportPath, args.Symbol)
 			if err != nil {
-				return errorResult(fmt.Sprintf("documentation lookup failed: %v", err)), nil, nil
+				return nil, nil, fmt.Errorf("documentation lookup failed: %w", err)
 			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: doc}},
@@ -91,17 +91,10 @@ func docsHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 	doc, err := be.FetchDocs(ctx, absDir, args.ImportPath, args.Symbol)
 	if err != nil {
-		return errorResult(fmt.Sprintf("documentation lookup failed: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("documentation lookup failed: %w", err)
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: doc}},
 	}, nil, nil
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }

@@ -76,13 +76,14 @@ func TestCreate(t *testing.T) {
 
 	filePath := filepath.Join(tmpDir, "lib.go")
 
-	res, _, _ := createHandler(context.TODO(), nil, Params{
+	res, _, err := createHandler(context.TODO(), nil, Params{
 		File:    filePath,
 		Content: "package lib\n\nfunc A() {}",
 	}, &testServer{reg: reg})
-	if res.IsError {
-		t.Fatalf("Initial write failed: %v", res.Content[0].(*mcp.TextContent).Text)
+	if err != nil {
+		t.Fatalf("Initial write failed: %v", err)
 	}
+	_ = res
 
 	//nolint:gosec // G304: Test file path.
 	content, _ := os.ReadFile(filePath)
@@ -118,17 +119,16 @@ func TestCreate_Validation(t *testing.T) {
 		t.Errorf("unexpected warning for valid syntax: %s", output)
 	}
 
-	// Invalid syntax - in v0.2.0, we don't block on syntax, but we report it via LSP diagnostics.
-	// Since testServer has no LSP, it should fall back to backend.Validate and show a WARNING.
-	resErr, _, _ := createHandler(context.TODO(), nil, Params{
+	// Invalid syntax - in v0.2.0, we raise an error if validation fails.
+	// Since testServer has no LSP, it should fall back to backend.Validate and return an error.
+	_, _, err = createHandler(context.TODO(), nil, Params{
 		File:    filePath,
 		Content: "package main\n\nfunc main() { invalid syntax }",
 	}, &testServer{reg: reg})
-	if resErr.IsError {
-		t.Errorf("expected success despite invalid syntax, got error: %s", resErr.Content[0].(*mcp.TextContent).Text)
+	if err == nil {
+		t.Fatal("expected error for invalid syntax")
 	}
-	outputErr := resErr.Content[0].(*mcp.TextContent).Text
-	if !strings.Contains(outputErr, "WARNING") {
-		t.Errorf("expected syntax check warning, got: %s", outputErr)
+	if !strings.Contains(err.Error(), "mock syntax error") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

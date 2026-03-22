@@ -40,15 +40,12 @@ func textContent(res *mcp.CallToolResult) string {
 
 func TestSearchHandler_EmptyQuery(t *testing.T) {
 	s := &testServer{ragEnabled: true, root: "/tmp/test"}
-	res, _, err := searchHandler(context.TODO(), Params{Query: ""}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := searchHandler(context.TODO(), Params{Query: ""}, s)
+	if err == nil {
 		t.Fatal("expected error for empty query")
 	}
-	if text := textContent(res); text != "query is required" {
-		t.Errorf("unexpected error message: %s", text)
+	if err.Error() != "query is required" {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
@@ -57,9 +54,6 @@ func TestSearchHandler_NoResults(t *testing.T) {
 	res, _, err := searchHandler(context.TODO(), Params{Query: "something"}, s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
 	}
 	text := textContent(res)
 	if text != "No relevant code snippets found for your query." {
@@ -83,9 +77,6 @@ func TestSearchHandler_WithResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
 	text := textContent(res)
 	if text == "" {
 		t.Fatal("expected non-empty output")
@@ -103,16 +94,12 @@ func TestSearchHandler_SearchError(t *testing.T) {
 		root:       "/tmp/test",
 		searchErr:  fmt.Errorf("connection refused"),
 	}
-	res, _, err := searchHandler(context.TODO(), Params{Query: "test"}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := searchHandler(context.TODO(), Params{Query: "test"}, s)
+	if err == nil {
 		t.Fatal("expected tool error on search failure")
 	}
-	text := textContent(res)
-	if !contains(text, "connection refused") {
-		t.Errorf("expected error message in output, got: %s", text)
+	if !contains(err.Error(), "connection refused") {
+		t.Errorf("expected error message in output, got: %v", err)
 	}
 }
 
@@ -123,12 +110,9 @@ func TestSearchHandler_LimitDefaults(t *testing.T) {
 	s := &testServer{ragEnabled: true, root: "/tmp/test", results: nil}
 
 	for _, limit := range []int{-1, 0, 5, 15} {
-		res, _, err := searchHandler(context.TODO(), Params{Query: "test", Limit: limit}, s)
+		_, _, err := searchHandler(context.TODO(), Params{Query: "test", Limit: limit}, s)
 		if err != nil {
 			t.Fatalf("limit=%d: unexpected error: %v", limit, err)
-		}
-		if res.IsError {
-			t.Fatalf("limit=%d: unexpected tool error: %s", limit, textContent(res))
 		}
 	}
 }

@@ -23,7 +23,6 @@ func (ts *testServer) ForFile(_ context.Context, path string) backend.LanguageBa
 	return ts.reg.ForFile(path)
 }
 
-
 func (ts *testServer) HasSeenTypeInfo(name string) bool {
 	return false
 }
@@ -88,9 +87,6 @@ func main() {
 	res, _, err := readHandler(context.Background(), nil, Params{File: srcFile}, s)
 	if err != nil {
 		t.Fatalf("handler failed: %v", err)
-	}
-	if res.IsError {
-		t.Errorf("tool returned error: %v", res.Content)
 	}
 	if len(res.Content) == 0 {
 		t.Fatal("no content returned")

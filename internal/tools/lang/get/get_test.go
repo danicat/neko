@@ -34,11 +34,11 @@ func (ts *testServer) ProjectRoot() string {
 }
 
 type mockBackend struct {
-	name      string
-	addOut    string
-	addErr    error
-	docsOut   string
-	docsErr   error
+	name    string
+	addOut  string
+	addErr  error
+	docsOut string
+	docsErr error
 }
 
 func (b *mockBackend) Name() string                          { return b.name }
@@ -52,11 +52,11 @@ func (b *mockBackend) LanguageID() string                    { return "go" }
 func (b *mockBackend) InitializationOptions() map[string]any { return nil }
 func (b *mockBackend) Capabilities() []backend.Capability    { return nil }
 
-func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)           { return "", nil }
-func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error)    { return nil, nil }
-func (b *mockBackend) Validate(_ context.Context, _ string) error                    { return nil }
-func (b *mockBackend) Format(_ context.Context, _ string) error                      { return nil }
+func (b *mockBackend) Outline(_ context.Context, _ string) (string, error)        { return "", nil }
+func (b *mockBackend) ImportDocs(_ context.Context, _ []string) ([]string, error) { return nil, nil }
+func (b *mockBackend) ParseImports(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (b *mockBackend) Validate(_ context.Context, _ string) error                 { return nil }
+func (b *mockBackend) Format(_ context.Context, _ string) error                   { return nil }
 func (b *mockBackend) BuildPipeline(_ context.Context, _ string, _ backend.BuildOpts) (*backend.BuildReport, error) {
 	return nil, nil
 }
@@ -73,8 +73,8 @@ func (b *mockBackend) InitProject(_ context.Context, _ backend.InitOpts) error {
 func (b *mockBackend) Modernize(_ context.Context, _ string, _ bool) (string, error) {
 	return "", nil
 }
-func (b *mockBackend) MutationTest(_ context.Context, _ string) (string, error)        { return "", nil }
-func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error         { return nil }
+func (b *mockBackend) MutationTest(_ context.Context, _ string) (string, error) { return "", nil }
+func (b *mockBackend) BuildTestDB(_ context.Context, _ string, _ string) error  { return nil }
 func (b *mockBackend) QueryTestDB(_ context.Context, _ string, _ string) (string, error) {
 	return "", nil
 }
@@ -90,15 +90,12 @@ func textContent(res *mcp.CallToolResult) string {
 func TestGetHandler_EmptyPackages(t *testing.T) {
 	s := &testServer{root: "/tmp/test"}
 
-	res, _, err := getHandler(context.TODO(), nil, Params{Packages: nil}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err := getHandler(context.TODO(), nil, Params{Packages: nil}, s)
+	if err == nil {
 		t.Fatal("expected error for empty packages")
 	}
-	if !strings.Contains(textContent(res), "at least one package is required") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "at least one package is required") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -114,15 +111,12 @@ func TestGetHandler_ResolveBackendError(t *testing.T) {
 
 	s := &testServer{resolveErr: fmt.Errorf("unsupported language"), root: tmpDir}
 
-	res, _, err := getHandler(context.TODO(), nil, Params{Packages: []string{"foo"}, Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = getHandler(context.TODO(), nil, Params{Packages: []string{"foo"}, Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for resolve failure")
 	}
-	if !strings.Contains(textContent(res), "unsupported language") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "unsupported language") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -139,15 +133,12 @@ func TestGetHandler_AddDependencyError(t *testing.T) {
 	be := &mockBackend{name: "test", addErr: fmt.Errorf("network error")}
 	s := &testServer{be: be, root: tmpDir}
 
-	res, _, err := getHandler(context.TODO(), nil, Params{Packages: []string{"foo"}, Dir: tmpDir}, s)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
+	_, _, err = getHandler(context.TODO(), nil, Params{Packages: []string{"foo"}, Dir: tmpDir}, s)
+	if err == nil {
 		t.Fatal("expected error for add dependency failure")
 	}
-	if !strings.Contains(textContent(res), "network error") {
-		t.Errorf("unexpected error: %s", textContent(res))
+	if !strings.Contains(err.Error(), "network error") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -172,10 +163,9 @@ func TestGetHandler_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+	_ = res
 	text := textContent(res)
+
 	if !strings.Contains(text, "added github.com/foo/bar") {
 		t.Errorf("expected add output in result, got: %s", text)
 	}
@@ -205,7 +195,5 @@ func TestGetHandler_DefaultDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("unexpected tool error: %s", textContent(res))
-	}
+	_ = res
 }

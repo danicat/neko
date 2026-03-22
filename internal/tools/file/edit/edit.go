@@ -75,7 +75,7 @@ type MatchResult struct {
 func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Server) (*mcp.CallToolResult, any, error) {
 	_, resSb, err := performEdit(ctx, args, s)
 	if err != nil {
-		return errorResult(err.Error()), nil, nil
+		return nil, nil, err
 	}
 
 	// For single edit, we pull diags immediately
@@ -92,8 +92,11 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 	}
 
 	if lspClient != nil {
-		lspClient.WaitForDiagnostics(ctx, args.File)
+		if _, err := lspClient.WaitForDiagnostics(ctx, args.File); err != nil {
+			return nil, nil, fmt.Errorf("LSP diagnostics wait failed: %w", err)
+		}
 		allDiags := lspClient.GetAllDiagnostics()
+
 		workspaceRoot := s.ProjectRoot()
 		if workspaceRoot == "" {
 			workspaceRoot, _ = filepath.Abs(".")
@@ -111,7 +114,7 @@ func editHandler(ctx context.Context, _ *mcp.CallToolRequest, args Params, s Ser
 
 func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiParams, s Server) (*mcp.CallToolResult, any, error) {
 	if len(args.Edits) == 0 {
-		return errorResult("no edits provided"), nil, nil
+		return nil, nil, fmt.Errorf("no edits provided")
 	}
 
 	var resSb strings.Builder
@@ -119,7 +122,7 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 
 	affectedBackends := make(map[string]backend.LanguageBackend)
 
-		for i, edit := range args.Edits {
+	for i, edit := range args.Edits {
 		fmt.Fprintf(&resSb, "\n#### %d. %s\n", i+1, edit.File)
 		_, editSb, err := performEdit(ctx, edit, s)
 		if err != nil {
@@ -145,8 +148,11 @@ func multiEditHandler(ctx context.Context, _ *mcp.CallToolRequest, args MultiPar
 			if lspClient, err := lsp.DefaultManager.ClientFor(ctx, be.Name(), workspaceRoot, cmd, cmdArgs, be.LanguageID(), be.InitializationOptions()); err == nil {
 				anyLSP = true
 				// We don't have a specific file to wait for, so we just pull current state
-				lspClient.PullDiagnostics(ctx)
+				if err := lspClient.PullDiagnostics(ctx); err != nil {
+					return nil, nil, fmt.Errorf("LSP diagnostics pull failed: %w", err)
+				}
 				workspaceRoot := s.ProjectRoot()
+
 				if workspaceRoot == "" {
 					workspaceRoot, _ = filepath.Abs(".")
 				}
@@ -272,16 +278,24 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 	}
 
 	if lspClient != nil {
-		lspClient.DidOpen(ctx, args.File, original)
-		lspClient.DidChange(ctx, args.File, newContent)
+		if err := lspClient.DidOpen(ctx, args.File, original); err != nil {
+			return "", nil, fmt.Errorf("LSP open failed: %w", err)
+		}
+		if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+			return "", nil, fmt.Errorf("LSP change failed: %w", err)
+		}
 
 		if edits, err := lspClient.OrganizeImports(ctx, args.File); err == nil && len(edits) > 0 {
 			newContent = lsp.ApplyTextEdits(newContent, edits)
-			lspClient.DidChange(ctx, args.File, newContent)
+			if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+				return "", nil, fmt.Errorf("LSP change failed after import organization: %w", err)
+			}
 		}
 		if edits, err := lspClient.Format(ctx, args.File); err == nil && len(edits) > 0 {
 			newContent = lsp.ApplyTextEdits(newContent, edits)
-			lspClient.DidChange(ctx, args.File, newContent)
+			if err := lspClient.DidChange(ctx, args.File, newContent); err != nil {
+				return "", nil, fmt.Errorf("LSP change failed after formatting: %w", err)
+			}
 		}
 	}
 
@@ -304,17 +318,19 @@ func performEdit(ctx context.Context, args Params, s Server) (string, *strings.B
 			imports, _ = be.ParseImports(ctx, args.File)
 		}
 		if err := s.IngestFile(ctx, args.File, newContent, symbols, imports); err != nil {
-			resSb.WriteString(fmt.Sprintf("\n**⚠️ RAG indexing failed:** %v\n", err))
+			return "", nil, fmt.Errorf("RAG indexing failed: %w", err)
 		}
 	}
 
 	if lspClient != nil {
-		lspClient.DidSave(ctx, args.File, newContent)
+		if err := lspClient.DidSave(ctx, args.File, newContent); err != nil {
+			return "", nil, fmt.Errorf("LSP save failed: %w", err)
+		}
 	} else if be != nil {
+
 		// Manual validation fallback for non-LSP backends or when LSP is down
 		if err := be.Validate(ctx, args.File); err != nil {
-			snippet := shared.ExtractErrorSnippet(newContent, err)
-			resSb.WriteString(fmt.Sprintf("\n**WARNING:** Post-edit syntax check failed: %v\n\nContext:\n```\n%s\n```\n", err, snippet))
+			return "", nil, err
 		}
 	}
 	return newContent, &resSb, nil
@@ -484,11 +500,4 @@ func similarity(s1, s2 string) float64 {
 		return 1.0
 	}
 	return 1.0 - float64(d)/float64(maxLen)
-}
-
-func errorResult(msg string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
-	}
 }
