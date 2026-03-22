@@ -20,6 +20,12 @@
           "type": "command",
           "command": "bash ${extensionPath}${/}hooks${/}block_go_build_test.sh",
           "description": "Enforces quality gates by blocking direct 'go build' and 'go test' commands, redirecting to mcp_neko_build."
+        },
+        {
+          "name": "neko-block-go-get-doc",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_go_get_doc.sh",
+          "description": "Enforces usage of Neko dependency and documentation tools over raw shell commands."
         }
       ]
     },
