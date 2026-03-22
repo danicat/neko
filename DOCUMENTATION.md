@@ -96,7 +96,9 @@ These tools work on any file type and provide graceful degradation when no backe
 | `close_project` | Return to lobby, shut down LSP servers |
 | `list_files` | Navigate project (respects .gitignore) |
 | `read_file` | Read with optional outline/imports |
-| `edit_file` | Smart edit with validation and formatting |
+| `multi_read` | Batch reading of multiple files or ranges |
+| `edit_file` | Smart edit with fuzzy matching and formatting |
+| `line_edit` | Surgical line-range replacement |
 | `create_file` | Create file with idiomatic formatting |
 | `review_code` | AI-powered idiomatic review |
 

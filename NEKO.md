@@ -8,7 +8,7 @@ Neko operates in two phases:
 - **Lobby**: You can only `open_project` or `create_project`. Always start here.
 - **Project Open**: Once a project is open, you gain access to navigation, editing, and engineering tools. Use `close_project` when switching to a different project.
 
-## Core Philosophy (v0.2.0)
+## Core Philosophy
 
 1.  **Project First**: Always establish a project context with `open_project` before working.
 2.  **Semantic Integrity**: Every edit or creation triggers a synchronous re-evaluation of project health via LSP. Use the **Diagnostic Report** as your next-turn todo list.
@@ -16,6 +16,7 @@ Neko operates in two phases:
 4.  **Type-Aware Reading**: Use `<NEKO>` semantic annotations in `read_file` to understand types and interfaces without calling `describe`.
 5.  **Refactoring Rule**: Always use `rename_symbol` for renames. Use `multi_edit` for interdependent changes across files.
 6.  **The Quality Gate**: Build -> Modernize -> Test -> Lint must pass.
+7.  **Exclusive Tooling**: Generic file modification tools (e.g., `write_file`, `replace`, `run_shell_command("sed ...")`) are blocked by system hooks. You **must** use Neko's language-aware tools for all project modifications.
 
 
 ## Tool Usage Guide
@@ -27,15 +28,18 @@ Neko operates in two phases:
 
 ### Navigation & Discovery
 -   **`list_files(dir, depth)`**: Recursively list source files.
--   **`read_file(file, start_line, end_line)`**: Structure-aware reader.
+-   **`read_file(file, start_line, end_line, outline)`**: Structure-aware reader.
+    -   **Outline Mode**: Set `outline=true` to get a structural map with signatures and docstrings.
     -   **Semantic Annotations**: Look for `<NEKO>` tags for type information.
     -   **Warm-Start**: Calling this pre-warms the LSP for subsequent edits.
+-   **`multi_read(reads)`**: Inspect multiple files or ranges in a single turn to save tokens.
 -   **`semantic_search(query)`**: Find code by meaning. Use when specific symbols are unknown.
 
 ### Editing Code
 -   **`edit_file(file, old_content, new_content)`**: Stateful LSP-aware editor.
     -   **Ranked Suggestions**: If `old_content` isn't found, use the suggestions to adjust.
     -   **Full Disclosure**: Use the returned diagnostic list to fix regressions immediately.
+-   **`line_edit(file, start_line, end_line, new_content)`**: Surgical line-range replacement. Use when exact line numbers are known.
 -   **`multi_edit(edits)`**: Use for atomic changes across multiple files.
 -   **`create_file(file, content)`**: Initialize new files with LSP sync and diagnostics.
 

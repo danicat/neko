@@ -28,7 +28,7 @@ It standardizes code exploration, precision editing, and verification across mul
    }
    ```
 
-## Core Philosophy (v0.2.0)
+## Core Philosophy
 
 1.  **Semantic Integrity**: Every edit or creation triggers a synchronous re-evaluation of the entire project health via the Language Server Protocol (LSP).
 2.  **Full Reality Disclosure**: Neko never prunes or hides errors. The agent is always confronted with the *Total Reality* of the project's semantic state.
