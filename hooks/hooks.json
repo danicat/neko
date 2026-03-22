@@ -8,6 +8,12 @@
           "type": "command",
           "command": "bash ${extensionPath}${/}hooks${/}block_reads.sh",
           "description": "Optimizes context usage by blocking manual file reads via shell and redirecting to neko's structure-aware read_file tool."
+        },
+        {
+          "name": "neko-block-shell-writes",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_shell_writes.sh",
+          "description": "Optimizes context usage by blocking manual file writes via shell and redirecting to neko's mcp_neko_create_file or edit_file tools."
         }
       ]
     },
@@ -19,6 +25,28 @@
           "type": "command",
           "command": "bash ${extensionPath}${/}hooks${/}block_reads.sh",
           "description": "Blocks the built-in read_file tool and redirects to neko's structure-aware mcp_neko_read_file tool."
+        }
+      ]
+    },
+    {
+      "matcher": "write_file",
+      "hooks": [
+        {
+          "name": "neko-block-builtin-write",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_write_file.sh",
+          "description": "Blocks the built-in write_file tool and redirects to neko's mcp_neko_create_file tool."
+        }
+      ]
+    },
+    {
+      "matcher": "replace",
+      "hooks": [
+        {
+          "name": "neko-block-builtin-replace",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_replace.sh",
+          "description": "Blocks the built-in replace tool and redirects to neko's mcp_neko_edit_file tool."
         }
       ]
     }
