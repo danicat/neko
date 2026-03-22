@@ -1,0 +1,15 @@
+{
+  "BeforeTool": [
+    {
+      "matcher": "run_shell_command",
+      "hooks": [
+        {
+          "name": "neko-block-shell-reads",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_shell_reads.sh",
+          "description": "Optimizes context usage by blocking manual file reads via shell and redirecting to neko's structure-aware read_file tool."
+        }
+      ]
+    }
+  ]
+}
