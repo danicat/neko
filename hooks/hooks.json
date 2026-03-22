@@ -14,6 +14,12 @@
           "type": "command",
           "command": "bash ${extensionPath}${/}hooks${/}block_shell_writes.sh",
           "description": "Optimizes context usage by blocking manual file writes via shell and redirecting to neko's mcp_neko_create_file or edit_file tools."
+        },
+        {
+          "name": "neko-block-go-build-test",
+          "type": "command",
+          "command": "bash ${extensionPath}${/}hooks${/}block_go_build_test.sh",
+          "description": "Enforces quality gates by blocking direct 'go build' and 'go test' commands, redirecting to mcp_neko_build."
         }
       ]
     },
