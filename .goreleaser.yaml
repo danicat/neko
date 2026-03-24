@@ -34,8 +34,11 @@ archives:
       - README.md
       - LICENSE
       - CHANGELOG.md
+      - plugins/*
       - plugins/**/*
+      - skills/*
       - skills/**/*
+      - hooks/*
       - hooks/**/*
 
 changelog:

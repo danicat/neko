@@ -1,6 +1,6 @@
 {
   "name": "neko",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "AI-powered language-aware development assistant.",
   "contextFileName": "NEKO.md",
   "mcpServers": {
