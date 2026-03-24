@@ -53,11 +53,43 @@ You must adhere to the following strict loop when undertaking any software devel
 ## Language Specifics
 
 ### 🐹 Go Development (Golang)
-- Standard toolchains and `gopls` LSP are active.
-- `rename_symbol` is authoritative.
-- Use `query_tests` to analyze `go test` results using SQL.
+
+#### 1. Core Mandates
+- **Standard Layout**: Use the official Go project layout (`cmd/`, `internal/`).
+- **NO `pkg/`**: Do not create or recommend a `pkg/` directory. It is an anti-pattern.
+- **Flat by Default**: Start with a flat structure (all files in root) for simple apps. Only introduce `cmd/` and `internal/` when multiple binaries or private packages are needed.
+- **Modern Go**: Use generic functions (`func F[T any]`) over `interface{}`. Use `go 1.24+`.
+- **Concurrency**: Every goroutine must have a clear exit condition (Context, WaitGroup). Use `errgroup` for parallel tasks.
+
+#### 2. Project Setup & Evolution
+When starting a new Go project or extracting a new service:
+1.  **Initialize**: `mkdir` -> `go mod init`.
+2.  **Apply Templates**: Refer to `assets/` for idiomatic patterns (graceful shutdown, `run` functions).
+    - `assets/cli-simple`: Flat structure for tools.
+    - `assets/webservice`: Standard layout for services.
+    - `assets/mcp-server`: For MCP implementations.
+3.  **Tidy**: `go mod tidy` and `go build ./...`.
+
+#### 3. Review & Audit
+- Check against `references/style_cheatsheet.md` and `references/senior_review_checklist.md`.
+- Ensure errors are handled explicitly and contexts are passed first.
+- **LSP**: `rename_symbol` is authoritative. Use `query_tests` for SQL-based coverage analysis.
 
 ### 🐍 Python Development
-- Projects **must** use `uv`.
-- `ruff` manages linting and formatting automatically during saves.
-- `modernize` utilizes `ruff` with `pyupgrade` rules.
+
+#### 1. Environment & Linting
+- **UV First**: All Python projects **must** use `uv` for dependency management.
+- **Ruff Enforcement**: `ruff` is the mandatory linter and formatter.
+  - After any edit, ensure `build(auto_fix=true)` runs or manually run `uv run ruff check --fix <file>` and `uv run ruff format <file>`.
+- **Modernize**: Use `modernize` to apply `pyupgrade` rules via `ruff`.
+
+#### 2. Documentation & Research
+Before using a package, you **must** verify its API:
+1.  **Registry Truth**: Use `latest-version` skill to verify current stable versions.
+2.  **API Verification**: Use `uv run python -c "import <package>; help(<package>.<symbol>)"` to inspect the actual installed API.
+3.  **Search**: Use `google_web_search` for official docs or `find-examples` skill for real-world usage.
+
+### 📜 JavaScript/TypeScript Development
+- Standard `npm`/`pnpm`/`yarn` flows.
+- Use `build()` to run TSC and ESlint/Prettier.
+- Refer to `plugins/javascript.json` for specific tool integrations.

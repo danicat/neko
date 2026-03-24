@@ -5,7 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.4] - 2026-03-24nn### Addedn- Added Vertex AI configuration fallback to RAG engine initialization (`GCP_PROJECT` and `GCP_LOCATION`).n- Enhanced security shell hooks to block pipeline bypasses using `awk`, `printf`, and scripting interpreters (`python`, `node`, etc.).nn### Changedn- Modified `open_project` behavior: missing RAG credentials now gracefully degrade the server by disabling the `semantic_search` tool rather than failing the entire project initialization.nn## [0.4.3] - 2026-03-24nn### Fixedn- Ensured `hooks/`, `skills/` and `plugins/` directories are properly included in the release archive configuration (`.goreleaser.yaml`).nn## [0.4.2] - 2026-03-22
+## [0.4.5] - 2026-03-24
+
+### Added
+- Ported and integrated standalone skills `find-examples` and `latest-version` into the Neko repository.
+- Added comprehensive Go best practices and project setup templates directly into the `neko-development-flow` skill.
+- Added advanced Go testing patterns to `test-quality-optimizer`.
+- Added specific guidelines for Python (`ruff`, `uv`) and TypeScript development to `neko-development-flow`.
+
+### Changed
+- Removed redundant `.skill` (ZIP) archives in favor of using raw skill directories natively supported by Gemini CLI.
+
+## [0.4.4] - 2026-03-24
+### Added
+- Added Vertex AI configuration fallback to RAG engine initialization (`GCP_PROJECT` and `GCP_LOCATION`).
+- Enhanced security shell hooks to block pipeline bypasses using `awk`, `printf`, and scripting interpreters (`python`, `node`, etc.).
+
+### Changed
+- Modified `open_project` behavior: missing RAG credentials now gracefully degrade the server by disabling the `semantic_search` tool rather than failing the entire project initialization.
+
+## [0.4.3] - 2026-03-24
+
+### Fixed
+- Ensured `hooks/`, `skills/` and `plugins/` directories are properly included in the release archive configuration (`.goreleaser.yaml`).
+
+## [0.4.2] - 2026-03-22
 
 ### Added
 - **`multi_read`**: New tool for batch reading of multiple files or line ranges to reduce token overhead.
@@ -61,3 +85,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Language Plugins**: Initial support for JavaScript/TypeScript.
 - **Agent Skills**: Introduced `neko-development` and `test-quality-optimizer`.
 - **Release Automation**: Configured `goreleaser`.
+

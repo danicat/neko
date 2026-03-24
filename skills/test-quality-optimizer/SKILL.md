@@ -42,6 +42,7 @@ Read the source code at the exact coordinates of the survivor or gap.
 Propose and write tests that specifically target the identified weakness.
 
 - **For Go**: Use Table-Driven Tests. Add a new sub-test case to the existing `tests` slice that targets the uncovered boundary.
+  - **Advanced**: Use `Fuzz` testing for complex input spaces. Refer to `references/advanced_testing.md`.
 - **For Python**: Add a new `@pytest.mark.parametrize` case or a new test function targeting the survived logic.
 
 ### 5. Verify the Fix
@@ -56,3 +57,5 @@ Never assume a test is good until it passes the quality gate.
 1.  **Zero Coverage Functions**: Code that is never touched by any test.
 2.  **Survivors in Error Handling**: Code where error paths are executed but the error is ignored.
 3.  **Boundary Survivors**: `>` changed to `>=` but tests still pass. This indicates missing edge-case coverage.
+4.  **Advanced Analysis**: Consult `references/advanced_testing.md` for fuzzing, benchmarks, and integration tests.
+

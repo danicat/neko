@@ -11,7 +11,7 @@ SERVER_BINARY_NAME=neko
 SERVER_BINARY=$(BINARY_DIR)/$(SERVER_BINARY_NAME)
 
 # Version
-VERSION := 0.4.4
+VERSION := 0.4.5
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 
@@ -41,3 +41,4 @@ release:
 	goreleaser release --clean
 
 .PHONY: all build install clean test test-cov snapshot release
+
