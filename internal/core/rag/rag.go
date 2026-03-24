@@ -29,34 +29,43 @@ func NewEngine(ctx context.Context, projectRoot string) (*Engine, error) {
 		return nil, err
 	}
 
+	var clientConfig genai.ClientConfig
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {
-		apiKey = os.Getenv("GEMINI_API_KEY")
+	        apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 
-	if apiKey == "" {
-		return nil, fmt.Errorf("AI credentials missing: set GOOGLE_API_KEY or GEMINI_API_KEY")
+	if apiKey != "" {
+	        clientConfig = genai.ClientConfig{
+	                APIKey:  apiKey,
+	                Backend: genai.BackendGeminiAPI,
+	        }
+	} else if os.Getenv("GCP_PROJECT") != "" && os.Getenv("GCP_LOCATION") != "" {
+	        clientConfig = genai.ClientConfig{
+	                Project:  os.Getenv("GCP_PROJECT"),
+	                Location: os.Getenv("GCP_LOCATION"),
+	                Backend:  genai.BackendVertexAI,
+	        }
+	} else {
+	        return nil, fmt.Errorf("AI credentials missing: set GOOGLE_API_KEY/GEMINI_API_KEY or GCP_PROJECT/GCP_LOCATION for Vertex AI")
 	}
 
 	db := chromem.NewDB()
 
 	embeddingFunc := func(ctx context.Context, text string) ([]float32, error) {
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  apiKey,
-			Backend: genai.BackendGeminiAPI,
-		})
-		if err != nil {
-			return nil, err
-		}
+	        client, err := genai.NewClient(ctx, &clientConfig)
+	        if err != nil {
+	                return nil, err
+	        }
 
-		contents := []*genai.Content{
-			genai.NewContentFromText(text, genai.RoleUser),
-		}
-		// Using gemini-embedding-001 as specified
-		res, err := client.Models.EmbedContent(ctx, "gemini-embedding-001", contents, nil)
-		if err != nil {
-			return nil, err
-		}
+	        contents := []*genai.Content{
+	                genai.NewContentFromText(text, genai.RoleUser),
+	        }
+	        // Using gemini-embedding-001 as specified
+	        res, err := client.Models.EmbedContent(ctx, "gemini-embedding-001", contents, nil)
+	        if err != nil {
+	                return nil, err
+	        }
 		if len(res.Embeddings) == 0 {
 			return nil, fmt.Errorf("no embeddings returned")
 		}

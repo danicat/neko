@@ -333,25 +333,24 @@ func (s *Server) establishProject(ctx context.Context, absRoot string, backends 
 
 	// Cancel any previous crawl before starting a new one
 	if s.crawlCancel != nil {
-		s.crawlCancel()
-		s.crawlCancel = nil
+	        s.crawlCancel()
+	        s.crawlCancel = nil
 	}
 
-	// Initialize RAG
+	// Initialize RAG (optional, depends on credentials)
 	engine, err := rag.NewEngine(ctx, absRoot)
 	if err == nil {
-		s.ragEngine = engine
-		// Initial crawl (async)
-		crawlCtx, crawlCancel := context.WithCancel(s.appCtx)
-		s.crawlCancel = crawlCancel
-		go s.crawlProject(crawlCtx, absRoot)
+	        s.ragEngine = engine
+	        // Initial crawl (async)
+	        crawlCtx, crawlCancel := context.WithCancel(s.appCtx)
+	        s.crawlCancel = crawlCancel
+	        go s.crawlProject(crawlCtx, absRoot)
 	} else {
-		return "", fmt.Errorf("failed to initialize RAG engine: %w", err)
+	        fmt.Fprintf(os.Stderr, "failed to initialize RAG engine: %v\n", err)
 	}
 
 	// Eager LSP initialization
-	for _, be := range backends {
-		if err := s.startLSP(ctx, be, absRoot); err != nil {
+	for _, be := range backends {		if err := s.startLSP(ctx, be, absRoot); err != nil {
 			return "", err
 		}
 	}

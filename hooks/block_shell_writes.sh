@@ -12,10 +12,13 @@ if [[ "$tool_name" == "run_shell_command" ]]; then
 
   # List of common commands or patterns used to write file contents
   write_patterns=("> " ">> " "tee " "sed -i " "awk -i ")
+  # Additional commands that can be used to bypass via scripting languages
+  script_patterns=()
   
   blocked=false
   matched_cmd=""
-  
+
+  # Check standard write patterns across the entire command
   for pattern in "${write_patterns[@]}"; do
     if [[ "$command" == *"$pattern"* ]]; then
         blocked=true
@@ -23,9 +26,25 @@ if [[ "$tool_name" == "run_shell_command" ]]; then
         break
     fi
   done
+  
+  # Check for pipeline bypasses using scripting languages
+  if [[ "$blocked" == false ]]; then
+    IFS='|' read -ra parts <<< "$command"
+    if [ ${#parts[@]} -gt 1 ]; then
+      last_part="${parts[${#parts[@]}-1]}"
+      last_part=$(echo "$last_part" | xargs)
+      for sp in "${script_patterns[@]}"; do
+        if [[ "$last_part" == "$sp"* ]]; then
+           blocked=true
+           matched_cmd="pipe to $sp"
+           break
+        fi
+      done
+    fi
+  fi
 
   # Explicitly check for echo to a file redirect if not caught above
-  if [[ "$command" == *"echo "* ]] && [[ "$command" == *">"* ]]; then
+  if [[ "$blocked" == false ]] && [[ "$command" == *"echo "* ]] && [[ "$command" == *">"* ]]; then
       blocked=true
       matched_cmd="echo ... > "
   fi

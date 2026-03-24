@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.2] - 2026-03-22
+## [0.4.4] - 2026-03-24nn### Addedn- Added Vertex AI configuration fallback to RAG engine initialization (`GCP_PROJECT` and `GCP_LOCATION`).n- Enhanced security shell hooks to block pipeline bypasses using `awk`, `printf`, and scripting interpreters (`python`, `node`, etc.).nn### Changedn- Modified `open_project` behavior: missing RAG credentials now gracefully degrade the server by disabling the `semantic_search` tool rather than failing the entire project initialization.nn## [0.4.3] - 2026-03-24nn### Fixedn- Ensured `hooks/`, `skills/` and `plugins/` directories are properly included in the release archive configuration (`.goreleaser.yaml`).nn## [0.4.2] - 2026-03-22
 
 ### Added
 - **`multi_read`**: New tool for batch reading of multiple files or line ranges to reduce token overhead.

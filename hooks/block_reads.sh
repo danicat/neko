@@ -27,22 +27,27 @@ if [[ "$tool_name" == "run_shell_command" ]]; then
   command=$(echo "$input" | jq -r '.tool_input.command // ""')
 
   # List of common commands used to read file contents
-  read_commands=("cat " "less " "more " "head " "tail ")
+  read_commands=("cat " "less " "more " "head " "tail " "awk " "printf " "echo ")
   
   blocked=false
   matched_cmd=""
   
-  for cmd in "${read_commands[@]}"; do
-    # Check if the command string contains one of the read commands
-    # We use a simple check, this could be made more robust with regex
-    if [[ "$command" == *"$cmd"* ]]; then
-        # Exception for git commands and pipes
-        if [[ "$command" != *"git "* ]] && [[ "$command" != *"| "* ]]; then
-            blocked=true
-            matched_cmd="$cmd"
-            break
-        fi
-    fi
+  # Split command by pipes to check each part
+  IFS='|' read -ra parts <<< "$command"
+  
+  for part in "${parts[@]}"; do
+    # Remove leading/trailing whitespace
+    part=$(echo "$part" | xargs)
+    for cmd in "${read_commands[@]}"; do
+      if [[ "$part" == "$cmd"* ]] || [[ "$part" == *"$cmd"* ]]; then
+          # Exception for git commands and standard dev commands
+          if [[ "$part" != *"git "* ]] && [[ "$part" != *"go "* ]] && [[ "$part" != *"npm "* ]]; then
+              blocked=true
+              matched_cmd="$cmd"
+              break 2
+          fi
+      fi
+    done
   done
 
   if [[ "$blocked" == true ]]; then

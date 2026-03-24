@@ -50,7 +50,7 @@ require (
 	github.com/ckaznocha/intrange v0.3.0 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/daixiang0/gci v0.13.5 // indirect
-	github.com/danicat/selene v0.0.0-20260210054541-fe5c34712543 // indirect
+	github.com/danicat/selene v0.1.1 // indirect
 	github.com/danicat/testquery v0.0.0-20260209135742-ce63a6e621a6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
